@@ -1,0 +1,80 @@
+# ClearanceFlow Backend Development Environment
+# Run with: docker-compose up -d
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: clearance-flow-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: clearance_flow
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d clearance_flow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - clearance-network
+
+  # Backend API
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: clearance-flow-backend
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/clearance_flow
+      - SECRET_KEY=dev-secret-key-change-in-production-min-32-chars
+      - DEBUG=true
+      - ENVIRONMENT=development
+      - CORS_ORIGINS=["http://localhost:3000","http://localhost:3001"]
+      - CPP_MODULE_PATH=./cpp_module/kahn_module.so
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/app/app:ro
+      - ./alembic:/app/alembic:ro
+      - ./alembic.ini:/app/alembic.ini:ro
+      - ./cpp_module:/app/cpp_module:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - clearance-network
+    command: >
+      sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+
+  # Optional: pgAdmin for database management
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: clearance-flow-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@clearanceflow.edu
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - postgres
+    networks:
+      - clearance-network
+    profiles:
+      - tools
+
+volumes:
+  postgres_data:
+  pgadmin_data:
+
+networks:
+  clearance-network:
+    driver: bridge
