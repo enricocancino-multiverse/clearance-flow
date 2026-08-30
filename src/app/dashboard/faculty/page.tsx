@@ -1,28 +1,76 @@
 "use client";
 
-import { DashboardShell } from "../DashboardShell";
+import React from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/context/AuthContext";
+import FacultyDashboardComponent from "@/components/FacultyDashboard";
+import ProfilePage from "@/components/ProfilePage";
+import type { ProfileData } from "@/components/ProfilePage";
+import { DEPT_CONFIG } from "@/types";
+
+type ViewType = "dashboard" | "profile";
 
 export default function FacultyDashboard() {
+  const router = useRouter();
+  const { session, loading, logout } = useAuth();
+  const [view, setView] = React.useState<ViewType>("dashboard");
+
+  if (loading) {
+    return <main className="min-h-screen bg-slate-950 text-white p-8">Loading...</main>;
+  }
+
+  if (!session || !session.faculty) {
+    router.replace("/");
+    return null;
+  }
+
+  const { account, faculty } = session;
+  const cfg = DEPT_CONFIG[faculty.department];
+
+  const userProfile: ProfileData = {
+    id: account.account_id,
+    name: account.email.split("@")[0],
+    role: "faculty",
+    dept: faculty.department,
+    position: faculty.position,
+    email: account.email,
+    bio: account.bio || "No bio yet.",
+    avatarUrl: account.avatar_url,
+    coverUrl: null,
+    highlights: [],
+    joinedAt: new Date(account.created_at).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+    }),
+  };
+
+  const handleBack = () => {
+    if (view === "profile") {
+      setView("dashboard");
+    } else {
+      logout();
+      router.replace("/");
+    }
+  };
+
+  if (view === "profile") {
+    return (
+      <ProfilePage
+        profile={userProfile}
+        isOwner={true}
+        onBack={handleBack}
+        onBrowse={() => router.push("/freespace")}
+      />
+    );
+  }
+
   return (
-    <DashboardShell title="Faculty Dashboard">
-      <div className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-          <p className="text-sm text-slate-400">Pending requests</p>
-          <p className="mt-2 text-4xl font-bold text-amber-400">3</p>
-        </div>
-        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-          <p className="text-sm text-slate-400">Today&apos;s queue</p>
-          <p className="mt-2 text-4xl font-bold text-blue-400">5</p>
-        </div>
-        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-          <p className="text-sm text-slate-400">Availability</p>
-          <p className="mt-2 text-lg font-semibold text-emerald-400">Accepting</p>
-        </div>
-      </div>
-      <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-900 p-6">
-        <h2 className="font-semibold">Priority queue</h2>
-        <p className="mt-2 text-sm text-slate-400">Student clearance requests will appear here.</p>
-      </div>
-    </DashboardShell>
+    <FacultyDashboardComponent
+      deptName={cfg.label}
+      deptKey={faculty.department}
+      facultyName={faculty.position || account.email.split("@")[0]}
+      onBack={handleBack}
+      onViewProfile={() => setView("profile")}
+    />
   );
 }

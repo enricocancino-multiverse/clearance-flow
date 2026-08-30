@@ -1,28 +1,73 @@
 "use client";
 
-import { DashboardShell } from "../DashboardShell";
+import React from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/context/AuthContext";
+import AdminDashboardComponent from "@/components/AdminDashboard";
+import ProfilePage from "@/components/ProfilePage";
+import type { ProfileData } from "@/components/ProfilePage";
+import { DEPT_CONFIG } from "@/types";
+
+type ViewType = "dashboard" | "profile";
 
 export default function AdminDashboard() {
+  const router = useRouter();
+  const { session, loading, logout } = useAuth();
+  const [view, setView] = React.useState<ViewType>("dashboard");
+
+  if (loading) {
+    return <main className="min-h-screen bg-slate-950 text-white p-8">Loading...</main>;
+  }
+
+  if (!session || !session.faculty?.is_superadmin) {
+    router.replace("/");
+    return null;
+  }
+
+  const { account, faculty } = session;
+  const cfg = DEPT_CONFIG[faculty.department];
+
+  const userProfile: ProfileData = {
+    id: account.account_id,
+    name: account.email.split("@")[0],
+    role: "superadmin",
+    dept: faculty.department,
+    position: "SuperAdmin · System Administrator",
+    email: account.email,
+    bio: account.bio || "No bio yet.",
+    avatarUrl: account.avatar_url,
+    coverUrl: null,
+    highlights: [],
+    joinedAt: new Date(account.created_at).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+    }),
+  };
+
+  const handleBack = () => {
+    if (view === "profile") {
+      setView("dashboard");
+    } else {
+      logout();
+      router.replace("/");
+    }
+  };
+
+  if (view === "profile") {
+    return (
+      <ProfilePage
+        profile={userProfile}
+        isOwner={true}
+        onBack={handleBack}
+        onBrowse={() => router.push("/freespace")}
+      />
+    );
+  }
+
   return (
-    <DashboardShell title="Administrator Dashboard">
-      <div className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-          <p className="text-sm text-slate-400">Registered users</p>
-          <p className="mt-2 text-4xl font-bold text-blue-400">128</p>
-        </div>
-        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-          <p className="text-sm text-slate-400">Graph nodes</p>
-          <p className="mt-2 text-4xl font-bold text-emerald-400">6</p>
-        </div>
-        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-          <p className="text-sm text-slate-400">System status</p>
-          <p className="mt-2 text-lg font-semibold text-emerald-400">Operational</p>
-        </div>
-      </div>
-      <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-900 p-6">
-        <h2 className="font-semibold">Clearance graph management</h2>
-        <p className="mt-2 text-sm text-slate-400">Manage offices, prerequisite rules, users, and algorithm metrics.</p>
-      </div>
-    </DashboardShell>
+    <AdminDashboardComponent
+      onBack={handleBack}
+      onViewProfile={() => setView("profile")}
+    />
   );
 }

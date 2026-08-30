@@ -16,7 +16,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "ClearanceFlow",
-  description: "Dynamic Academic Clearance Engine — Graph-powered clearance routing with intelligent dependency resolution",
+  description: "Saint John Bosoc College Clearance System",
+  /* description: "Dynamic Academic Clearance Engine — Graph-powered clearance routing with intelligent dependency resolution", */
 };
 
 export const viewport: Viewport = {

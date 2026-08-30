@@ -131,7 +131,7 @@ export default function Landing() {
             <span className="text-xl font-bold tracking-tight text-white">ClearanceFlow</span>
           </div>
           <h1 className="text-4xl font-bold text-white leading-tight mb-3">
-            Dynamic Academic<br />
+            Sant John Bosco Colleged<br />
             <span className="text-blue-400">Clearance Engine</span>
           </h1>
           <p className="text-slate-400 text-base max-w-xs mx-auto leading-relaxed">
@@ -158,7 +158,7 @@ export default function Landing() {
         <div className="w-full max-w-md animate-float-in">
           <div className="lg:hidden text-center mb-8">
             <div className="text-2xl font-bold text-slate-900">ClearanceFlow</div>
-            <p className="text-sm text-slate-500 mt-1">Dynamic Academic Clearance Engine</p>
+            <p className="text-sm text-slate-500 mt-1">Saint John Bosoc College Clearance System</p>
           </div>
 
           <div className="bg-white rounded-2xl shadow-lg border border-slate-100 p-8">
