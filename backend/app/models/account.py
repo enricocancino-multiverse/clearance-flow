@@ -63,6 +63,7 @@ class Account(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     avatar_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     bio: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+    must_change_password: Mapped[bool] = mapped_column(nullable=False, default=False)
 
     # Relationships
     student: Mapped[Optional["Student"]] = relationship(
@@ -90,6 +91,8 @@ class Student(Base, TimestampMixin):
         index=True,
     )
     department: Mapped[Department] = mapped_column(Enum(Department), nullable=False)
+    department_group: Mapped[Optional[str]] = mapped_column(String(40), nullable=True, default="academic")
+    academic_year: Mapped[str] = mapped_column(String(9), nullable=False, default="2026-2027")
     year_level: Mapped[int] = mapped_column(nullable=False)
     section: Mapped[str] = mapped_column(String(20), nullable=False)
     exam_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -126,6 +129,8 @@ class Faculty(Base, TimestampMixin):
         index=True,
     )
     department: Mapped[Department] = mapped_column(Enum(Department), nullable=False)
+    department_group: Mapped[Optional[str]] = mapped_column(String(40), nullable=True, default="faculty")
+    academic_year: Mapped[str] = mapped_column(String(9), nullable=False, default="2026-2027")
     is_superadmin: Mapped[bool] = mapped_column(nullable=False, default=False)
     position: Mapped[str] = mapped_column(String(100), nullable=False)
     availability: Mapped[AvailabilityStatus] = mapped_column(

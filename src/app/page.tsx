@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
+import { authApi } from "@/lib/api";
 import { ViewType, DeptKey, DEPT_CONFIG } from "@/types";
 
 // ─── Credential Classification (matches backend logic) ────────────────────────
@@ -38,9 +39,9 @@ function classify(credential: string): { view: ViewType; dept: DeptKey } {
 }
 
 const HINTS = [
-  { label: "Student", example: "2026-STU-001", color: "#3B82F6" },
-  { label: "Faculty", example: "faculty@clearanceflow.edu", color: "#10B981" },
-  { label: "Admin", example: "admin@clearanceflow.edu", color: "#8B5CF6" },
+  { label: "Student", credential: "2026-STU-001", color: "#3B82F6" },
+  { label: "Faculty", credential: "faculty@clearanceflow.edu", color: "#10B981" },
+  { label: "Admin", credential: "admin@clearanceflow.edu", color: "#8B5CF6" },
 ];
 
 export default function Landing() {
@@ -53,6 +54,13 @@ export default function Landing() {
   const [dept, setDept] = useState<DeptKey>("cs");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [demoOpen, setDemoOpen] = useState(false);
+  const [showResetDialog, setShowResetDialog] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetToken, setResetToken] = useState("");
+  const [resetPassword, setResetPassword] = useState("");
+  const [resetMessage, setResetMessage] = useState("");
+  const [resetLoading, setResetLoading] = useState(false);
 
   const detected = credential.trim() ? classify(credential) : null;
   const isStudent = detected?.view === "student";
@@ -106,10 +114,58 @@ export default function Landing() {
     }
   };
 
-  const handleDemoLogin = async (example: string) => {
-    setCredential(example);
+  const handleDemoLogin = (credential: string) => {
+    setCredential(credential);
     setPassword("password123");
-    await handleLogin(example, "password123");
+    setError("");
+    setDemoOpen(false);
+  };
+
+  const handleForgotPassword = async () => {
+    if (!resetEmail.trim()) {
+      setResetMessage("Enter the email you use to sign in.");
+      return;
+    }
+
+    setResetLoading(true);
+    setResetMessage("");
+
+    try {
+      const result = await authApi.forgotPassword(resetEmail.trim());
+      setResetToken(result.reset_token ?? "");
+      setResetMessage(result.message + (result.reset_token ? " Your local dev reset token is shown below." : ""));
+    } catch (err: any) {
+      setResetMessage(err.message ?? "Unable to request a password reset.");
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!resetToken.trim()) {
+      setResetMessage("Use the reset token returned by the forgot-password request.");
+      return;
+    }
+    if (!resetPassword.trim() || resetPassword.length < 8) {
+      setResetMessage("Choose a new password with at least 8 characters.");
+      return;
+    }
+
+    setResetLoading(true);
+    setResetMessage("");
+
+    try {
+      const result = await authApi.resetPassword(resetToken, resetPassword);
+      setResetMessage(result.message);
+      setResetPassword("");
+      setResetToken("");
+      setResetEmail("");
+      setTimeout(() => setShowResetDialog(false), 1200);
+    } catch (err: any) {
+      setResetMessage(err.message ?? "Unable to reset the password.");
+    } finally {
+      setResetLoading(false);
+    }
   };
 
   return (
@@ -131,8 +187,8 @@ export default function Landing() {
             <span className="text-xl font-bold tracking-tight text-white">ClearanceFlow</span>
           </div>
           <h1 className="text-4xl font-bold text-white leading-tight mb-3">
-            Sant John Bosco Colleged<br />
-            <span className="text-blue-400">Clearance Engine</span>
+            Saint John Bosco College<br />
+            <span className="text-blue-400">Clearance System</span>
           </h1>
           <p className="text-slate-400 text-base max-w-xs mx-auto leading-relaxed">
             Graph-powered clearance routing with intelligent dependency resolution and algorithmic scheduling.
@@ -158,7 +214,7 @@ export default function Landing() {
         <div className="w-full max-w-md animate-float-in">
           <div className="lg:hidden text-center mb-8">
             <div className="text-2xl font-bold text-slate-900">ClearanceFlow</div>
-            <p className="text-sm text-slate-500 mt-1">Saint John Bosoc College Clearance System</p>
+            <p className="text-sm text-slate-500 mt-1">Saint John Bosco College Clearance System</p>
           </div>
 
           <div className="bg-white rounded-2xl shadow-lg border border-slate-100 p-8">
@@ -246,10 +302,20 @@ export default function Landing() {
 
               {error && <p className="text-xs text-red-500 font-medium">{error}</p>}
 
+              <div className="-mt-1 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowResetDialog(true)}
+                  className="text-xs font-medium text-blue-600 hover:text-blue-700 underline-offset-2 hover:underline"
+                >
+                  Forgot password?
+                </button>
+              </div>
+
               <button
                 onClick={() => handleLogin()}
                 disabled={submitting || authLoading}
-                className="w-full py-3 rounded-xl text-sm font-bold text-white transition-all duration-200 hover:opacity-90 active:scale-[0.98] mt-2 shadow-md disabled:opacity-70"
+                className="w-full py-3 rounded-xl text-sm font-bold text-white transition-all duration-200 hover:opacity-90 active:scale-[0.98] shadow-md disabled:opacity-70"
                 style={{
                   background: detected
                     ? `linear-gradient(135deg, ${detectedColor}cc, ${detectedColor})`
@@ -261,37 +327,154 @@ export default function Landing() {
               </button>
             </div>
 
-            {/* Credential Hints */}
-            <div className="mt-6 pt-5 border-t border-slate-100">
-              <p className="text-xs text-slate-400 mb-3 text-center" style={{ fontFamily: "var(--font-geist-sans)" }}>
-                Demo credentials (click to fill)
-              </p>
+            <div className="mt-6 border-t border-slate-100 pt-4">
               <div className="space-y-2">
-                {HINTS.map((h) => (
-                  <button
-                    key={h.label}
-                    onClick={() => handleDemoLogin(h.example)}
-                    className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors text-left group"
-                  >
-                    <div className="w-2 h-2 rounded-full shrink-0" style={{ background: h.color }} />
-                    <span className="text-xs font-semibold text-slate-500 w-20 shrink-0">{h.label}</span>
-                    <span
-                      className="text-xs text-slate-400 group-hover:text-slate-600 transition-colors"
-                      style={{ fontFamily: "var(--font-geist-mono)" }}
-                    >
-                      {h.example}
-                    </span>
-                  </button>
-                ))}
+                <button
+                  type="button"
+                  className="w-full flex items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:shadow-md"
+                >
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">G</span>
+                  Log in with Gmail
+                </button>
+
+                <button
+                  type="button"
+                  className="w-full flex items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:shadow-md"
+                >
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#1877F2] text-[10px] font-bold text-white">f</span>
+                  Log in with Facebook
+                </button>
               </div>
+
+              <div className="relative mt-4">
+                <button
+                  type="button"
+                  aria-expanded={demoOpen}
+                  onClick={() => setDemoOpen((prev) => !prev)}
+                  className="w-full flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-left transition hover:border-slate-300 hover:bg-slate-100"
+                >
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Demo accounts</p>
+                    <p className="mt-0.5 text-xs text-slate-400">Quick sign-in shortcuts</p>
+                  </div>
+                  <span
+                    className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-slate-500 shadow-sm transition-all duration-300"
+                    style={{ transform: demoOpen ? "rotate(180deg)" : "rotate(0deg)" }}
+                  >
+                    ▾
+                  </span>
+                </button>
+
+                <div
+                  className={[
+                    "absolute left-0 right-0 z-20 mt-2 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-2 shadow-lg transition-all duration-300 ease-out",
+                    demoOpen
+                      ? "pointer-events-auto max-h-64 translate-y-0 opacity-100"
+                      : "pointer-events-none max-h-0 -translate-y-2 opacity-0",
+                  ].join(" ")}
+                >
+                  <div className="space-y-2">
+                    {HINTS.map((h) => (
+                      <button
+                        key={h.label}
+                        type="button"
+                        onClick={() => handleDemoLogin(h.credential)}
+                        className="w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-left transition hover:bg-white group"
+                      >
+                        <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: h.color }} />
+                        <span className="text-xs font-semibold text-slate-600 w-28 shrink-0">{h.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <p className="mt-3 text-center text-[11px] text-slate-500">
+                Demo password: <span className="font-semibold text-slate-700">password123</span>
+                <span className="block text-[10px] text-slate-400 mt-1">Selected demo accounts auto-fill this password.</span>
+              </p>
             </div>
 
             <p className="text-center text-xs text-slate-400 mt-5" style={{ fontFamily: "var(--font-geist-sans)" }}>
-              University Academic Records System · AY 2026–2027
+              University Academic Records System · AY 2026-2027
             </p>
           </div>
         </div>
       </div>
+
+      {showResetDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">Reset password</h3>
+                <p className="mt-1 text-xs text-slate-500">No domain is required in dev mode — a local reset token is generated instead.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowResetDialog(false)}
+                className="text-slate-400 hover:text-slate-600 text-xl leading-none"
+                aria-label="Close reset dialog"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className="text-xs font-semibold text-slate-600 block mb-1.5">Email</label>
+                <input
+                  type="email"
+                  value={resetEmail}
+                  onChange={(e) => setResetEmail(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                  placeholder="student@clearanceflow.edu"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={handleForgotPassword}
+                disabled={resetLoading}
+                className="w-full rounded-xl bg-slate-900 px-3 py-2.5 text-sm font-semibold text-white disabled:opacity-70"
+              >
+                {resetLoading ? "Sending…" : "Send reset token"}
+              </button>
+
+              {resetToken && (
+                <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-700">Reset token</p>
+                  <p className="mt-1 break-all text-xs text-slate-700">{resetToken}</p>
+                </div>
+              )}
+
+              <div>
+                <label className="text-xs font-semibold text-slate-600 block mb-1.5">New password</label>
+                <input
+                  type="password"
+                  value={resetPassword}
+                  onChange={(e) => setResetPassword(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                  placeholder="Minimum 8 characters"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={handleResetPassword}
+                disabled={resetLoading}
+                className="w-full rounded-xl bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white disabled:opacity-70"
+              >
+                {resetLoading ? "Resetting…" : "Reset password"}
+              </button>
+
+              {resetMessage && (
+                <p className="text-xs text-slate-600">{resetMessage}</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

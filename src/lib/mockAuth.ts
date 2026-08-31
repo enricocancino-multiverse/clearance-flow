@@ -201,6 +201,41 @@ export async function mockLogout(): Promise<void> {
   }
 }
 
+export async function mockForgotPassword(email: string): Promise<{ message: string; reset_token: string }> {
+  await new Promise((r) => setTimeout(r, 400));
+
+  const account = Object.values(DEMO_ACCOUNTS).find((a) => a.email.toLowerCase() === email.trim().toLowerCase());
+  if (!account) {
+    return {
+      message: "Password reset instructions sent.",
+      reset_token: "local-dev-only-token",
+    };
+  }
+
+  const token = createMockJWT(account.account_id);
+  return {
+    message: "Password reset instructions sent.",
+    reset_token: token,
+  };
+}
+
+export async function mockResetPassword(token: string, newPassword: string): Promise<{ message: string }> {
+  await new Promise((r) => setTimeout(r, 400));
+
+  const accountId = parseMockJWT(token);
+  if (!accountId) {
+    throw new Error("Invalid or expired reset token");
+  }
+
+  const account = Object.values(DEMO_ACCOUNTS).find((a) => a.account_id === accountId);
+  if (!account) {
+    throw new Error("Invalid or expired reset token");
+  }
+
+  account.password = newPassword;
+  return { message: "Password reset successfully." };
+}
+
 // ─── Credential Classification (mirrors backend) ──────────────────────────────
 
 export function classifyCredential(credential: string): { view: "student" | "faculty" | "superadmin"; dept: DeptKey } {

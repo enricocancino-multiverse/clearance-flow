@@ -1,6 +1,7 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTheme } from "../context/ThemeContext";
+import { useLiveDashboardState } from "../lib/liveDashboardState";
 
 interface Props {
   onBack: () => void;
@@ -23,16 +24,16 @@ const INITIAL_NODES: GraphNode[] = [
   { id: "library", label: "Library", x: 140, y: 70 },
   { id: "medical", label: "Medical", x: 400, y: 70 },
   { id: "finance", label: "Finance", x: 60, y: 200 },
-  { id: "osas", label: "OSAS", x: 270, y: 200 },
+  { id: "sas", label: "SAS", x: 270, y: 200 },
   { id: "depthead", label: "Dept Head", x: 165, y: 320 },
   { id: "registrar", label: "Registrar", x: 330, y: 430 },
 ];
 
 const INITIAL_EDGES: GraphEdge[] = [
   { from: "library", to: "finance" },
-  { from: "library", to: "osas" },
+  { from: "library", to: "sas" },
   { from: "finance", to: "depthead" },
-  { from: "osas", to: "depthead" },
+  { from: "sas", to: "depthead" },
   { from: "medical", to: "registrar" },
   { from: "depthead", to: "registrar" },
 ];
@@ -58,8 +59,9 @@ type Tab = "graph" | "metrics" | "users";
 
 export default function AdminDashboard({ onBack, onViewProfile }: Props) {
   const { isDark } = useTheme();
-  const [nodes, setNodes] = useState<GraphNode[]>(INITIAL_NODES);
-  const [edges, setEdges] = useState<GraphEdge[]>(INITIAL_EDGES);
+  const { state, setGraph } = useLiveDashboardState();
+  const [nodes, setNodes] = useState<GraphNode[]>(state.graphNodes.length ? state.graphNodes as GraphNode[] : INITIAL_NODES);
+  const [edges, setEdges] = useState<GraphEdge[]>(state.graphEdges.length ? state.graphEdges as GraphEdge[] : INITIAL_EDGES);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [mode, setMode] = useState<"view" | "draw" | "delete">("view");
   const [activeTab, setActiveTab] = useState<Tab>("graph");
@@ -70,6 +72,15 @@ export default function AdminDashboard({ onBack, onViewProfile }: Props) {
   const text = isDark ? "text-slate-100" : "text-slate-900";
   const muted = isDark ? "text-slate-500" : "text-slate-500";
 
+  const syncLiveGraph = (nextNodes: GraphNode[], nextEdges: GraphEdge[]) => {
+    setNodes(nextNodes);
+    setEdges(nextEdges);
+    setGraph(
+      nextNodes.map(node => ({ ...node, office: node.label, status: "locked", prerequisites: [] })),
+      nextEdges.map(edge => ({ from: edge.from, to: edge.to }))
+    );
+  };
+
   const handleNodeClick = (id: string) => {
     if (mode === "draw") {
       if (!selectedNode) {
@@ -78,7 +89,12 @@ export default function AdminDashboard({ onBack, onViewProfile }: Props) {
         if (selectedNode !== id) {
           const exists = edges.some(e => e.from === selectedNode && e.to === id);
           if (!exists) {
-            setEdges(prev => [...prev, { from: selectedNode, to: id }]);
+            const nextEdges = [...edges, { from: selectedNode, to: id }];
+            setEdges(nextEdges);
+            setGraph(
+              nodes.map(node => ({ ...node, office: node.label, status: "locked", prerequisites: [] })),
+              nextEdges.map(edge => ({ from: edge.from, to: edge.to }))
+            );
           }
         }
         setSelectedNode(null);
@@ -90,33 +106,73 @@ export default function AdminDashboard({ onBack, onViewProfile }: Props) {
 
   const deleteEdge = (from: string, to: string) => {
     if (mode === "delete") {
-      setEdges(prev => prev.filter(e => !(e.from === from && e.to === to)));
+      const nextEdges = edges.filter(e => !(e.from === from && e.to === to));
+      setEdges(nextEdges);
+      setGraph(
+        nodes.map(node => ({ ...node, office: node.label, status: "locked", prerequisites: [] })),
+        nextEdges.map(edge => ({ from: edge.from, to: edge.to }))
+      );
     }
   };
 
   const addNode = () => {
     const id = `node_${Date.now()}`;
-    setNodes(prev => [
-      ...prev,
+    const nextNodes = [
+      ...nodes,
       {
         id,
         label: "New Node",
         x: 200 + Math.random() * 200,
         y: 150 + Math.random() * 200,
       },
-    ]);
+    ];
+    setNodes(nextNodes);
+    setGraph(
+      nextNodes.map(node => ({ ...node, office: node.label, status: "locked", prerequisites: [] })),
+      edges.map(edge => ({ from: edge.from, to: edge.to }))
+    );
   };
 
   const deleteNode = (id: string) => {
-    setNodes(prev => prev.filter(n => n.id !== id));
-    setEdges(prev => prev.filter(e => e.from !== id && e.to !== id));
+    const nextNodes = nodes.filter(n => n.id !== id);
+    const nextEdges = edges.filter(e => e.from !== id && e.to !== id);
+    setNodes(nextNodes);
+    setEdges(nextEdges);
+    setGraph(
+      nextNodes.map(node => ({ ...node, office: node.label, status: "locked", prerequisites: [] })),
+      nextEdges.map(edge => ({ from: edge.from, to: edge.to }))
+    );
     if (selectedNode === id) setSelectedNode(null);
+  };
+
+  const moveNode = (id: string, x: number, y: number) => {
+    const nextNodes = nodes.map(node => (node.id === id ? { ...node, x, y } : node));
+    setNodes(nextNodes);
+    setGraph(
+      nextNodes.map(node => ({ ...node, office: node.label, status: "locked", prerequisites: [] })),
+      edges.map(edge => ({ from: edge.from, to: edge.to }))
+    );
+  };
+
+  const renameNode = (id: string, label: string) => {
+    const trimmed = label.trim();
+    if (!trimmed) return;
+    const nextNodes = nodes.map(node => (node.id === id ? { ...node, label: trimmed } : node));
+    setNodes(nextNodes);
+    setGraph(
+      nextNodes.map(node => ({ ...node, office: node.label, status: "locked", prerequisites: [] })),
+      edges.map(edge => ({ from: edge.from, to: edge.to }))
+    );
   };
 
   const resetGraph = () => {
     setNodes(INITIAL_NODES);
     setEdges(INITIAL_EDGES);
     setSelectedNode(null);
+    setGraph(
+      INITIAL_NODES.map(node => ({ ...node, office: node.label, status: "locked", prerequisites: [] })),
+      INITIAL_EDGES.map(edge => ({ from: edge.from, to: edge.to }))
+    );
   };
 
   const totalStudents = DEPT_COUNTS.reduce((s, d) => s + d.students, 0);
@@ -217,6 +273,8 @@ export default function AdminDashboard({ onBack, onViewProfile }: Props) {
             onAddNode={addNode}
             onDeleteNode={deleteNode}
             onReset={resetGraph}
+            onNodeMove={moveNode}
+            onRenameNode={renameNode}
             isDark={isDark}
             card={card}
             text={text}
@@ -247,6 +305,8 @@ function GraphBuilder({
   onAddNode,
   onDeleteNode,
   onReset,
+  onNodeMove,
+  onRenameNode,
   isDark,
   card,
   text,
@@ -262,12 +322,52 @@ function GraphBuilder({
   onAddNode: () => void;
   onDeleteNode: (id: string) => void;
   onReset: () => void;
+  onNodeMove: (id: string, x: number, y: number) => void;
+  onRenameNode: (id: string, label: string) => void;
   isDark: boolean;
   card: string;
   text: string;
   muted: string;
 }) {
   const getNode = (id: string) => nodes.find(n => n.id === id)!;
+  const [draftName, setDraftName] = useState("");
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const dragRef = useRef<{ id: string; offsetX: number; offsetY: number } | null>(null);
+
+  useEffect(() => {
+    setDraftName(selectedNode ? getNode(selectedNode)?.label ?? "" : "");
+  }, [selectedNode, nodes]);
+
+  const toSvgPoint = (clientX: number, clientY: number) => {
+    const svg = svgRef.current;
+    if (!svg) return { x: 0, y: 0 };
+    const rect = svg.getBoundingClientRect();
+    return {
+      x: ((clientX - rect.left) / rect.width) * 520,
+      y: ((clientY - rect.top) / rect.height) * 520,
+    };
+  };
+
+  const handlePointerDown = (event: React.PointerEvent<SVGGElement>, id: string) => {
+    if (mode !== "view") return;
+    event.stopPropagation();
+    const node = nodes.find(n => n.id === id);
+    if (!node) return;
+    const point = toSvgPoint(event.clientX, event.clientY);
+    dragRef.current = { id, offsetX: point.x - node.x, offsetY: point.y - node.y };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const handlePointerMove = (event: React.PointerEvent<SVGSVGElement>) => {
+    if (!dragRef.current) return;
+    const point = toSvgPoint(event.clientX, event.clientY);
+    const { id, offsetX, offsetY } = dragRef.current;
+    onNodeMove(id, Math.max(30, Math.min(490, point.x - offsetX)), Math.max(30, Math.min(490, point.y - offsetY)));
+  };
+
+  const handlePointerUp = () => {
+    dragRef.current = null;
+  };
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6">
@@ -317,7 +417,15 @@ function GraphBuilder({
           </div>
         )}
 
-        <svg viewBox="0 0 520 520" className="w-full" style={{ maxHeight: "520px" }}>
+        <svg
+          ref={svgRef}
+          viewBox="0 0 520 520"
+          className="w-full"
+          style={{ maxHeight: "520px" }}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerLeave={handlePointerUp}
+        >
           <defs>
             <marker id="sa-arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
               <path d="M0,0 L0,6 L8,3 z" fill="#3B82F6" />
@@ -361,6 +469,7 @@ function GraphBuilder({
             return (
               <g key={`${from}-${to}`}>
                 <line
+                  className="graph-edge"
                   x1={x1}
                   y1={y1}
                   x2={x2}
@@ -404,11 +513,13 @@ function GraphBuilder({
               <g
                 key={n.id}
                 transform={`translate(${n.x}, ${n.y})`}
-                style={{ cursor: "pointer" }}
+                style={{ cursor: mode === "view" ? "grab" : "pointer" }}
+                onPointerDown={event => handlePointerDown(event, n.id)}
                 onClick={() => onNodeClick(n.id)}
               >
                 {isSelected && <circle r="38" fill="#3B82F6" fillOpacity="0.1" filter="url(#sa-glow)" />}
                 <circle
+                  className="graph-node graph-glow"
                   r="28"
                   fill="#0f172a"
                   stroke={isSelected ? "#3B82F6" : "#334155"}
@@ -480,12 +591,35 @@ function GraphBuilder({
             + Add Node
           </button>
           {selectedNode && (
-            <button
-              onClick={() => onDeleteNode(selectedNode)}
-              className="w-full py-2 rounded-lg text-xs font-bold text-red-400 border border-red-900 bg-red-950/30 hover:bg-red-950/60 transition-all"
-            >
-              Delete Selected Node
-            </button>
+            <>
+              <div className="space-y-2">
+                <label className={`text-[10px] font-semibold uppercase tracking-[0.18em] ${muted}`}>
+                  Rename Node
+                </label>
+                <input
+                  value={draftName}
+                  onChange={event => setDraftName(event.target.value)}
+                  className={`w-full rounded-lg border px-3 py-2 text-xs outline-none ${
+                    isDark ? "bg-slate-800 border-slate-700 text-slate-100" : "bg-white border-gray-300 text-gray-900"
+                  }`}
+                  placeholder="Node label"
+                />
+                <button
+                  onClick={() => {
+                    onRenameNode(selectedNode, draftName);
+                  }}
+                  className="w-full py-2 rounded-lg text-xs font-bold border transition-all text-blue-400 border-blue-900 bg-blue-950/30 hover:bg-blue-950/60"
+                >
+                  Save Name
+                </button>
+              </div>
+              <button
+                onClick={() => onDeleteNode(selectedNode)}
+                className="w-full py-2 rounded-lg text-xs font-bold text-red-400 border border-red-900 bg-red-950/30 hover:bg-red-950/60 transition-all"
+              >
+                Delete Selected Node
+              </button>
+            </>
           )}
           <button
             onClick={onReset}
@@ -758,74 +892,247 @@ function UserManagement({
   text: string;
   muted: string;
 }) {
-  const users = [
-    { name: "Dr. Juana Dela Cruz", role: "Faculty Admin", dept: "CS", deptColor: "#3B82F6", status: "Active", lastLogin: "2h ago" },
-    { name: "Prof. Ramon Gonzales", role: "Faculty Admin", dept: "HM", deptColor: "#F97316", status: "Active", lastLogin: "1d ago" },
-    { name: "Ms. Elena Villanueva", role: "Faculty Admin", dept: "CRIM", deptColor: "#EF4444", status: "In Class", lastLogin: "30min ago" },
-    { name: "Mr. Patrick Sy", role: "Faculty Admin", dept: "BSED", deptColor: "#10B981", status: "Away", lastLogin: "3h ago" },
-    { name: "Ms. Grace Tolentino", role: "Faculty Admin", dept: "TVOC", deptColor: "#8B5CF6", status: "Active", lastLogin: "45min ago" },
-    { name: "Librarian (System)", role: "Dept Node", dept: "SYS", deptColor: "#94a3b8", status: "Online", lastLogin: "Automated" },
-    { name: "Finance Office (System)", role: "Dept Node", dept: "SYS", deptColor: "#94a3b8", status: "Online", lastLogin: "Automated" },
+  const [roleFilter, setRoleFilter] = useState<"all" | "faculty" | "student">("all");
+  const [departmentFilter, setDepartmentFilter] = useState<string>("all");
+  const [yearFilter, setYearFilter] = useState<string>("all");
+  const [batchFilter, setBatchFilter] = useState<string>("2026-2027");
+  const [searchTerm, setSearchTerm] = useState<string>("");
+
+  const departmentOptions = [
+    "all",
+    "Computer Science",
+    "Hospitality Management",
+    "Criminology",
+    "Basic Education (8 to K12)",
+    "TESDA",
+    "General Education",
   ];
+
+  type AccountRow = {
+    name: string;
+    role: "Faculty Admin" | "Student";
+    department: string;
+    deptCode?: string;
+    year?: string;
+    batch?: string;
+    status: string;
+    lastLogin: string;
+  };
+
+  const teacherAccounts: AccountRow[] = [
+    { name: "Dr. Juana Dela Cruz", role: "Faculty Admin", department: "Computer Science", deptCode: "CS", status: "Active", lastLogin: "2h ago" },
+    { name: "Prof. Ramon Gonzales", role: "Faculty Admin", department: "Hospitality Management", deptCode: "HM", status: "Active", lastLogin: "1d ago" },
+    { name: "Ms. Elena Villanueva", role: "Faculty Admin", department: "Criminology", deptCode: "CRIM", status: "In Class", lastLogin: "30min ago" },
+    { name: "Mr. Patrick Sy", role: "Faculty Admin", department: "Basic Education (8 to K12)", deptCode: "BE", status: "Away", lastLogin: "3h ago" },
+    { name: "Ms. Grace Tolentino", role: "Faculty Admin", department: "TESDA", deptCode: "TESDA", status: "Active", lastLogin: "45min ago" },
+    { name: "Mr. Adrian Ramos", role: "Faculty Admin", department: "General Education", deptCode: "GEN", status: "Active", lastLogin: "1h ago" },
+  ];
+
+  const studentAccounts: AccountRow[] = [
+    { name: "Alyssa M. Santos", role: "Student", department: "Computer Science", year: "3rd Year", batch: "2026-2027", status: "Clearance Active", lastLogin: "Today" },
+    { name: "Joel D. Reyes", role: "Student", department: "Hospitality Management", year: "2nd Year", batch: "2026-2027", status: "Verified", lastLogin: "Yesterday" },
+    { name: "Rhea C. Lim", role: "Student", department: "Criminology", year: "4th Year", batch: "2026-2027", status: "Hold", lastLogin: "2d ago" },
+    { name: "Mika P. Torres", role: "Student", department: "Basic Education (8 to K12)", year: "Grade 10", batch: "2026-2027", status: "Clearance Active", lastLogin: "Today" },
+    { name: "Nathan V. Perez", role: "Student", department: "TESDA", year: "1st Year", batch: "2026-2027", status: "Verified", lastLogin: "3h ago" },
+    { name: "Celine A. Bautista", role: "Student", department: "General Education", year: "1st Year", batch: "2026-2027", status: "Clearance Active", lastLogin: "Today" },
+  ];
+
+  const accountLists: Record<"all" | "faculty" | "student", AccountRow[]> = {
+    faculty: teacherAccounts,
+    student: studentAccounts,
+    all: [...teacherAccounts, ...studentAccounts],
+  };
+
+  const filteredAccounts = accountLists[roleFilter].filter(account => {
+    const departmentMatch =
+      departmentFilter === "all" || account.department === departmentFilter;
+    const yearMatch =
+      yearFilter === "all" ||
+      (account.role === "Student" && account.year === yearFilter) ||
+      account.role !== "Student";
+    const batchMatch =
+      batchFilter === "all" ||
+      (account.role === "Student" && account.batch === batchFilter) ||
+      account.role !== "Student";
+    const searchMatch =
+      searchTerm.trim() === "" ||
+      account.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      account.department.toLowerCase().includes(searchTerm.toLowerCase());
+
+    return departmentMatch && yearMatch && batchMatch && searchMatch;
+  });
+
+  const statusClass = (status: string) => {
+    if (status === "Active" || status === "Verified" || status === "Clearance Active") {
+      return "text-emerald-400";
+    }
+    if (status === "In Class" || status === "Hold") {
+      return "text-amber-400";
+    }
+    return "text-slate-500";
+  };
+
+  const departmentColors: Record<string, string> = {
+    "Computer Science": "#3B82F6",
+    "Hospitality Management": "#F97316",
+    "Criminology": "#EF4444",
+    "Basic Education (8 to K12)": "#10B981",
+    TESDA: "#8B5CF6",
+    "General Education": "#94a3b8",
+  };
+
+  const getInitials = (name: string) =>
+    name
+      .split(" ")
+      .map(part => part[0])
+      .slice(0, 2)
+      .join("");
+
+  const batchHistory = ["2024-2025", "2025-2026", "2026-2027"];
+  const yearOptions =
+    departmentFilter === "TESDA"
+      ? ["all", "1st Year", "2nd Year", "3rd Year"]
+      : departmentFilter === "Basic Education (8 to K12)"
+        ? ["all", "Grade 8", "Grade 9", "Grade 10", "Grade 11", "Grade 12"]
+        : ["all", "1st Year", "2nd Year", "3rd Year", "4th Year"];
 
   return (
     <div className={`rounded-2xl border overflow-hidden ${card}`}>
-      <div className={`px-6 py-4 border-b flex items-center justify-between ${isDark ? "border-slate-800" : "border-gray-200"}`}>
-        <h2 className={`text-sm font-bold ${text}`}>System Users</h2>
-        <button className="px-4 py-1.5 rounded-lg text-xs font-bold bg-violet-600 text-white hover:bg-violet-500 transition-colors">
-          + Add User
-        </button>
-      </div>
-      <div className={`divide-y ${isDark ? "divide-slate-800" : "divide-gray-200"}`}>
-        {users.map(u => (
-          <div
-            key={u.name}
-            className={`px-6 py-4 flex items-center gap-4 transition-colors ${
-              isDark ? "hover:bg-slate-800/30" : "hover:bg-gray-50"
-            }`}
-          >
-            <div
-              className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
-              style={{ background: `${u.deptColor}55` }}
-            >
-              {u.name
-                .split(" ")
-                .map(w => w[0])
-                .slice(0, 2)
-                .join("")}
+      <div className={`px-6 py-4 border-b ${isDark ? "border-slate-800" : "border-gray-200"}`}>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <h2 className={`text-sm font-bold ${text}`}>User Management</h2>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <div className={`flex items-center gap-2 rounded-lg border px-2 py-1.5 ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-gray-200"}`}>
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" className={muted}>
+                <circle cx="11" cy="11" r="6" />
+                <path d="M20 20l-4.35-4.35" strokeLinecap="round" />
+              </svg>
+              <input
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                placeholder="Search user..."
+                className={`w-28 bg-transparent text-xs outline-none ${isDark ? "text-slate-100 placeholder:text-slate-500" : "text-gray-700 placeholder:text-gray-400"}`}
+              />
             </div>
-            <div className="flex-1 min-w-0">
-              <div className={`text-sm font-semibold ${text}`}>{u.name}</div>
-              <div className={`text-xs mt-0.5 ${muted}`} style={{ fontFamily: "Inter, sans-serif" }}>
-                {u.role}
-              </div>
-            </div>
-            <span className="text-xs font-bold px-2 py-0.5 rounded-full shrink-0" style={{ background: `${u.deptColor}22`, color: u.deptColor }}>
-              {u.dept}
-            </span>
-            <span
-              className={`text-xs font-semibold shrink-0 ${
-                u.status === "Active" || u.status === "Online"
-                  ? "text-emerald-400"
-                  : u.status === "In Class"
-                  ? "text-amber-400"
-                  : "text-slate-500"
+
+            <select
+              value={roleFilter}
+              onChange={e => setRoleFilter(e.target.value as "all" | "faculty" | "student")}
+              className={`rounded-lg border px-3 py-1.5 text-xs font-medium outline-none ${
+                isDark ? "bg-slate-800 border-slate-700 text-slate-100" : "bg-white border-gray-200 text-gray-700"
               }`}
             >
-              {u.status}
-            </span>
-            <span className={`text-xs shrink-0 ${muted}`} style={{ fontFamily: "JetBrains Mono, monospace" }}>
-              {u.lastLogin}
-            </span>
-            <button className={`transition-colors shrink-0 ${isDark ? "text-slate-600 hover:text-slate-400" : "text-gray-400 hover:text-gray-600"}`}>
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="5" r="1" />
-                <circle cx="12" cy="12" r="1" />
-                <circle cx="12" cy="19" r="1" />
-              </svg>
+              <option value="all">All Accounts</option>
+              <option value="faculty">Teachers</option>
+              <option value="student">Students</option>
+            </select>
+
+            <select
+              value={departmentFilter}
+              onChange={e => setDepartmentFilter(e.target.value)}
+              className={`rounded-lg border px-3 py-1.5 text-xs font-medium outline-none ${
+                isDark ? "bg-slate-800 border-slate-700 text-slate-100" : "bg-white border-gray-200 text-gray-700"
+              }`}
+            >
+              {departmentOptions.map(option => (
+                <option key={option} value={option}>
+                  {option === "all" ? "All Departments" : option}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={yearOptions.includes(yearFilter) ? yearFilter : "all"}
+              onChange={e => setYearFilter(e.target.value)}
+              className={`rounded-lg border px-3 py-1.5 text-xs font-medium outline-none ${
+                isDark ? "bg-slate-800 border-slate-700 text-slate-100" : "bg-white border-gray-200 text-gray-700"
+              }`}
+            >
+              {yearOptions.map(option => (
+                <option key={option} value={option}>
+                  {option === "all" ? "All Year Levels" : option}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={batchFilter}
+              onChange={e => setBatchFilter(e.target.value)}
+              className={`rounded-lg border px-3 py-1.5 text-xs font-medium outline-none ${
+                isDark ? "bg-slate-800 border-slate-700 text-slate-100" : "bg-white border-gray-200 text-gray-700"
+              }`}
+            >
+              <option value="all">All Batches</option>
+              {batchHistory.map(batch => (
+                <option key={batch} value={batch}>{batch}</option>
+              ))}
+            </select>
+
+            <button className="px-4 py-1.5 rounded-lg text-xs font-bold bg-violet-600 text-white hover:bg-violet-500 transition-colors">
+              + Add Account
             </button>
           </div>
-        ))}
+        </div>
+      </div>
+
+      <div className={`divide-y ${isDark ? "divide-slate-800" : "divide-gray-200"}`}>
+        {filteredAccounts.length === 0 ? (
+          <div className={`px-6 py-8 text-sm ${muted}`}>
+            No accounts match this department filter.
+          </div>
+        ) : (
+          filteredAccounts.map(account => {
+            const color = departmentColors[account.department] ?? "#94a3b8";
+            const isStudent = account.role === "Student";
+
+            return (
+              <div
+                key={`${account.name}-${account.department}`}
+                className={`px-6 py-4 flex flex-col gap-3 md:flex-row md:items-center md:gap-4 transition-colors ${
+                  isDark ? "hover:bg-slate-800/30" : "hover:bg-gray-50"
+                }`}
+              >
+                <div
+                  className="w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
+                  style={{ background: `${color}66` }}
+                >
+                  {getInitials(account.name)}
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <div className={`text-sm font-semibold ${text}`}>{account.name}</div>
+                  <div className={`text-xs mt-0.5 ${muted}`} style={{ fontFamily: "Inter, sans-serif" }}>
+                    {account.role}
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 md:justify-end">
+                  <span
+                    className="text-xs font-bold px-2 py-0.5 rounded-full shrink-0"
+                    style={{ background: `${color}22`, color }}
+                  >
+                    {account.deptCode ?? account.department.slice(0, 4).toUpperCase()}
+                  </span>
+
+                  {isStudent ? (
+                    <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-700/80 text-slate-200">
+                      {account.year}
+                    </span>
+                  ) : null}
+
+                  <span className={`text-xs font-semibold shrink-0 ${statusClass(account.status)}`}>
+                    {account.status}
+                  </span>
+
+                  <span className={`text-xs shrink-0 ${muted}`} style={{ fontFamily: "JetBrains Mono, monospace" }}>
+                    {account.lastLogin}
+                  </span>
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
     </div>
   );

@@ -1,7 +1,8 @@
 "use client";
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { DeptKey, DEPT_CONFIG } from '../types';
 import { useTheme } from '../context/ThemeContext';
+import { useLiveDashboardState, INITIAL_GRAPH_NODES, INITIAL_GRAPH_EDGES, INITIAL_QUEUE } from '../lib/liveDashboardState';
 
 interface Props {
   currentUserId: string;
@@ -30,16 +31,16 @@ const NODES: ClearNode[] = [
   { id: 'library', label: 'Library', office: 'University Library', status: 'completed', prerequisites: [], x: 160, y: 70 },
   { id: 'medical', label: 'Medical', office: 'Health Services Unit', status: 'completed', prerequisites: [], x: 490, y: 70 },
   { id: 'finance', label: 'Finance', office: 'Accounting Office', status: 'active', prerequisites: ['library'], x: 80, y: 210 },
-  { id: 'osas', label: 'OSAS', office: 'Student Affairs Office', status: 'active', prerequisites: ['library'], x: 310, y: 210 },
-  { id: 'depthead', label: 'Dept Head', office: 'Department Office', status: 'locked', prerequisites: ['finance', 'osas'], x: 195, y: 360 },
+  { id: 'sas', label: 'SAS', office: 'Student Affairs Office', status: 'active', prerequisites: ['library'], x: 310, y: 210 },
+  { id: 'depthead', label: 'Dept Head', office: 'Department Office', status: 'locked', prerequisites: ['finance', 'sas'], x: 195, y: 360 },
   { id: 'registrar', label: 'Registrar', office: 'Registrar\'s Office', status: 'locked', prerequisites: ['depthead', 'medical'], x: 370, y: 480 },
 ];
 
 const EDGES: [string, string][] = [
   ['library', 'finance'],
-  ['library', 'osas'],
+  ['library', 'sas'],
   ['finance', 'depthead'],
-  ['osas', 'depthead'],
+  ['sas', 'depthead'],
   ['medical', 'registrar'],
   ['depthead', 'registrar'],
 ];
@@ -60,10 +61,49 @@ export default function StudentDashboard({
   onBrowse,
 }: Props) {
   const { isDark, toggle } = useTheme();
+  const { state } = useLiveDashboardState();
   const cfg = DEPT_CONFIG[dept];
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
-  const completed = NODES.filter(n => n.status === 'completed').length;
-  const progress = Math.round((completed / NODES.length) * 100);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const dragRef = useRef<{ x: number; y: number; originX: number; originY: number } | null>(null);
+  const graphNodes = (state.graphNodes.length ? state.graphNodes : INITIAL_GRAPH_NODES) as ClearNode[];
+  const graphEdges = state.graphEdges.length ? state.graphEdges : INITIAL_GRAPH_EDGES;
+  const queue = state.queue.length ? state.queue : INITIAL_QUEUE;
+  const completed = graphNodes.filter(n => n.status === 'completed').length;
+  const progress = Math.round((completed / graphNodes.length) * 100);
+
+  const clampZoom = (value: number) => Math.min(1.8, Math.max(0.8, value));
+
+  const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const delta = event.deltaY > 0 ? -0.12 : 0.12;
+    setZoom(prev => clampZoom(prev + delta));
+  };
+
+  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    dragRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+      originX: pan.x,
+      originY: pan.y,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragRef.current) return;
+    const dx = event.clientX - dragRef.current.x;
+    const dy = event.clientY - dragRef.current.y;
+    setPan({
+      x: dragRef.current.originX + dx / zoom,
+      y: dragRef.current.originY + dy / zoom,
+    });
+  };
+
+  const handlePointerUp = () => {
+    dragRef.current = null;
+  };
 
   const bg = isDark ? 'bg-slate-950' : 'bg-gray-50';
   const navBg = isDark ? 'bg-slate-900/80 border-slate-800' : 'bg-white/90 border-gray-200';
@@ -157,9 +197,9 @@ export default function StudentDashboard({
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-6 py-6 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
+      <div className="max-w-7xl mx-auto px-6 py-6 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-6 items-start">
         {/* Main: DAG visualizer */}
-        <div className={`rounded-2xl border overflow-hidden ${card}`}>
+        <div className={`rounded-2xl border overflow-hidden ${card} lg:max-w-230 lg:mr-2`}>
           <div className={`px-6 py-4 border-b ${isDark ? 'border-slate-800' : 'border-gray-200'} flex items-center justify-between`}>
             <div>
               <h2 className={`text-sm font-semibold ${text}`}>Clearance Dependency Graph</h2>
@@ -175,22 +215,41 @@ export default function StudentDashboard({
           </div>
 
           <div className="relative p-4">
-            <DAGVisualizer
-              nodes={NODES}
-              edges={EDGES}
-              accentColor={cfg.color}
-              hoveredNode={hoveredNode}
-              onHover={setHoveredNode}
-            />
+            <div
+              className="relative h-90 overflow-hidden rounded-xl border border-slate-700/80 bg-slate-950/30 select-none"
+              onWheel={handleWheel}
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerLeave={handlePointerUp}
+              style={{ cursor: dragRef.current ? 'grabbing' : 'grab', touchAction: 'none' }}
+            >
+              <div
+                className="absolute inset-0"
+                style={{
+                  transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                  transformOrigin: '50% 50%',
+                  transition: dragRef.current ? 'none' : 'transform 0.12s ease-out',
+                }}
+              >
+                <DAGVisualizer
+                  nodes={graphNodes}
+                  edges={graphEdges.map(edge => [edge.from, edge.to] as [string, string])}
+                  accentColor={cfg.color}
+                  hoveredNode={hoveredNode}
+                  onHover={setHoveredNode}
+                />
+              </div>
+            </div>
 
             {/* Tooltip for locked nodes */}
             {hoveredNode && (() => {
-              const n = NODES.find(x => x.id === hoveredNode);
+              const n = graphNodes.find(x => x.id === hoveredNode);
               if (!n || n.status !== 'locked') return null;
-              const prereqLabels = n.prerequisites.map(p => NODES.find(x => x.id === p)?.label).filter(Boolean);
+              const prereqLabels = (n.prerequisites ?? []).map(p => graphNodes.find(x => x.id === p)?.label).filter(Boolean);
               return (
                 <div
-                  className={`absolute top-4 right-4 rounded-xl p-3 border max-w-[180px] text-xs ${
+                  className={`absolute top-4 right-4 rounded-xl p-3 border max-w-45 text-xs ${
                     isDark
                       ? 'bg-slate-800 border-slate-700'
                       : 'bg-white border-gray-200'
@@ -209,10 +268,12 @@ export default function StudentDashboard({
           </div>
 
           {/* Node info strip */}
-          <div className="px-6 pb-5 grid grid-cols-3 sm:grid-cols-6 gap-2">
-            {NODES.map(n => (
-              <NodeCard key={n.id} node={n} accentColor={cfg.color} isDark={isDark} />
-            ))}
+          <div className="px-3 sm:px-6 pb-4 sm:pb-5 mt-auto">
+            <div className="custom-scroll flex gap-2 overflow-x-auto pb-1">
+              {graphNodes.map(n => (
+                <NodeCard key={n.id} node={n} accentColor={cfg.color} isDark={isDark} />
+              ))}
+            </div>
           </div>
         </div>
 
@@ -222,7 +283,7 @@ export default function StudentDashboard({
           <div className={`rounded-2xl border p-5 ${card}`}>
             <h3 className={`text-sm font-semibold ${text} mb-3`}>Clearance Status</h3>
             <div className="space-y-2">
-              {NODES.map(n => (
+              {graphNodes.map(n => (
                 <div key={n.id} className="flex items-center gap-3">
                   <StatusDot status={n.status} color={cfg.color} />
                   <div className="flex-1 min-w-0">
@@ -253,11 +314,11 @@ export default function StudentDashboard({
             <div className="flex items-center justify-between mb-3">
               <h3 className={`text-sm font-semibold ${text}`}>Assigned Sign-Off Windows</h3>
               <span className={`text-xs font-mono ${muted}`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                {QUEUE.length} upcoming
+                {queue.length} upcoming
               </span>
             </div>
             <div className="space-y-3">
-              {QUEUE.map(q => (
+              {queue.map(q => (
                 <div
                   key={q.id}
                   className="rounded-xl p-3 border transition-all"
@@ -291,7 +352,7 @@ export default function StudentDashboard({
             <h3 className={`text-sm font-semibold ${text} mb-1`}>Next Action</h3>
             <p className={`text-xs mb-3 ${muted}`} style={{ fontFamily: 'Inter, sans-serif' }}>
               Visit <span className={`${text} font-medium`}>Finance Office</span> or{' '}
-              <span className={`${text} font-medium`}>OSAS</span> — both are currently eligible based on your
+              <span className={`${text} font-medium`}>SAS</span> — both are currently eligible based on your
               completed prerequisites.
             </p>
             <button
@@ -380,6 +441,7 @@ function DAGVisualizer({
         return (
           <line
             key={`${from}-${to}`}
+            className="graph-edge"
             x1={x1}
             y1={y1}
             x2={x2}
@@ -408,9 +470,9 @@ function DAGVisualizer({
             {/* Glow ring for active nodes */}
             {isActive && <circle r="40" fill={color} fillOpacity="0.08" filter="url(#glow)" />}
             {/* Outer ring */}
-            <circle r="28" fill="#0f172a" stroke={color} strokeWidth={isActive ? 2 : 1.5} strokeOpacity={isHovered ? 1 : 0.8} />
+            <circle className="graph-node graph-glow" r="28" fill="#0f172a" stroke={color} strokeWidth={isActive ? 2 : 1.5} strokeOpacity={isHovered ? 1 : 0.8} />
             {/* Inner fill */}
-            <circle r="22" fill={`${color}18`} stroke={color} strokeWidth="0.5" strokeOpacity="0.4" />
+            <circle className="graph-node" r="22" fill={`${color}18`} stroke={color} strokeWidth="0.5" strokeOpacity="0.4" />
 
             {/* Icon */}
             {n.status === 'completed' && <text textAnchor="middle" dy="5" fontSize="14" fill={color}>✓</text>}
@@ -439,14 +501,15 @@ function NodeCard({ node, accentColor, isDark }: { node: ClearNode; accentColor:
   const color = node.status === 'completed' ? '#10B981' : node.status === 'active' ? accentColor : '#475569';
   return (
     <div
-      className={`rounded-lg p-2 text-center border transition-all ${isDark ? 'border-slate-800' : 'border-gray-200'}`}
-      style={{ background: `${color}10` }}
+      className={`min-w-32.5 flex-1 rounded-xl px-3 py-2 text-center border transition-all ${isDark ? 'border-slate-700 bg-slate-800/50' : 'border-gray-200 bg-gray-50'}`}
+      style={{
+        background: `${color}10`,
+        boxShadow: node.status === 'active' ? `0 0 0 1px ${color}33 inset` : undefined,
+      }}
     >
-      <div className="text-xs font-semibold truncate" style={{ color }}>
-        {node.label}
-      </div>
-      <div className="text-xs mt-0.5" style={{ color: color + '99', fontFamily: 'Inter, sans-serif' }}>
-        {node.status === 'completed' ? '✓' : node.status === 'active' ? '⚡' : '🔒'}
+      <div className="flex items-center justify-center gap-2 text-xs font-semibold truncate" style={{ color }}>
+        <span className="text-[11px]" aria-hidden="true">{node.status === 'completed' ? '✓' : node.status === 'active' ? '⚡' : '🔒'}</span>
+        <span className="truncate">{node.label}</span>
       </div>
     </div>
   );

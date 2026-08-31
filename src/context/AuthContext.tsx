@@ -8,7 +8,7 @@ import {
   useCallback,
   type ReactNode,
 } from "react";
-import { mockLogin, mockMe, mockLogout } from "@/lib/mockAuth";
+import { authApi } from "@/lib/api";
 import type { AuthSession, LoginPayload, UserRole } from "@/types";
 
 // ─── Context Shape ────────────────────────────────────────────────────────────
@@ -31,21 +31,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Rehydrate session from stored JWT on first mount
   useEffect(() => {
-    mockMe()
-      .then(setSession)
-      .catch(() => localStorage.removeItem("cf_token"))
-      .finally(() => setLoading(false));
+    const restoreSession = async () => {
+      try {
+        const token = typeof window !== "undefined" ? localStorage.getItem("cf_token") : null;
+        if (!token) {
+          setSession(null);
+          return;
+        }
+
+        const sessionData = await authApi.me();
+        setSession(sessionData);
+        localStorage.setItem("cf_token", sessionData.token);
+      } catch {
+        localStorage.removeItem("cf_token");
+        setSession(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    restoreSession();
   }, []);
 
   const login = useCallback(async (payload: LoginPayload): Promise<AuthSession> => {
-    const s = await mockLogin(payload);
-    setSession(s);
-    return s;
+    const sessionData = await authApi.login(payload);
+    localStorage.setItem("cf_token", sessionData.token);
+    setSession(sessionData);
+    return sessionData;
   }, []);
 
   const logout = useCallback(async () => {
-    await mockLogout();
-    setSession(null);
+    try {
+      await authApi.logout();
+    } catch {
+      // Ignore backend logout failures; clear client session regardless.
+    } finally {
+      localStorage.removeItem("cf_token");
+      setSession(null);
+    }
   }, []);
 
   return (

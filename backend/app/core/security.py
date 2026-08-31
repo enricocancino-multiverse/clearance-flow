@@ -71,6 +71,20 @@ def create_refresh_token(subject: str, role: str) -> str:
     return jwt.encode(to_encode.model_dump(), settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
+def create_reset_token(subject: str, role: str = "reset") -> str:
+    """Create a JWT reset token for local dev-only password recovery."""
+    expire = datetime.now(timezone.utc) + timedelta(minutes=30)
+
+    to_encode = TokenPayload(
+        sub=subject,
+        role=role,
+        exp=int(expire.timestamp()),
+        iat=int(datetime.now(timezone.utc).timestamp()),
+        type="reset",
+    )
+    return jwt.encode(to_encode.model_dump(), settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
 def decode_token(token: str) -> TokenPayload:
     """Decode and validate a JWT token."""
     try:
@@ -80,6 +94,20 @@ def decode_token(token: str) -> TokenPayload:
         raise ValueError("Token has expired")
     except jwt.JWTError as e:
         raise ValueError(f"Invalid token: {str(e)}")
+
+
+def decode_reset_token(token: str) -> TokenPayload:
+    """Decode a password reset token and enforce reset-only usage."""
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        decoded = TokenPayload(**payload)
+        if decoded.type != "reset":
+            raise ValueError("Invalid token type")
+        return decoded
+    except jwt.ExpiredSignatureError as exc:
+        raise ValueError("Token has expired") from exc
+    except jwt.JWTError as exc:
+        raise ValueError(f"Invalid token: {str(exc)}") from exc
 
 
 def create_token_pair(subject: str, role: str) -> tuple[str, str]:

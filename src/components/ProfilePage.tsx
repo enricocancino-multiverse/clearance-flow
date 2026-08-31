@@ -183,7 +183,7 @@ export default function ProfilePage({ profile: initialProfile, isOwner, onBack, 
         {/* Cover photo */}
         <div className="relative h-48 sm:h-64 rounded-b-2xl overflow-hidden bg-slate-800 group">
           {profile.coverUrl && <img src={profile.coverUrl} alt="Cover" className="w-full h-full object-cover" />}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+          <div className="absolute inset-0 bg-linear-to-t from-black/60 via-transparent to-transparent" />
           {isOwner && editing && (
             <button
               onClick={() => coverRef.current?.click()}
@@ -507,7 +507,7 @@ function HighlightsTab({
             onClick={() => setExpanded(expanded === h.id ? null : h.id)}
           >
             <img src={h.url} alt={h.caption} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-3">
+            <div className="absolute inset-0 bg-linear-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-3">
               <span className="text-white text-xs font-medium truncate">{h.caption}</span>
             </div>
             {editing && (
@@ -569,7 +569,7 @@ function ClearanceTab({
     { label: 'Library', status: 'done', date: 'Aug 18, 2025' },
     { label: 'Medical', status: 'done', date: 'Aug 19, 2025' },
     { label: 'Finance', status: 'active', date: 'Pending' },
-    { label: 'OSAS', status: 'active', date: 'Pending' },
+    { label: 'SAS', status: 'active', date: 'Pending' },
     { label: 'Dept Head', status: 'locked', date: '—' },
     { label: 'Registrar', status: 'locked', date: '—' },
   ];

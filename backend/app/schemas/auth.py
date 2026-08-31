@@ -24,6 +24,7 @@ class LoginResponse(BaseModel):
     faculty: Optional["FacultyResponse"] = None
     token: str
     expires_at: datetime
+    must_change_password: bool = False
 
 
 class TokenRefreshRequest(BaseModel):
@@ -46,6 +47,7 @@ class AccountResponse(BaseModel):
     theme_preference: str
     avatar_url: Optional[str] = None
     bio: Optional[str] = None
+    must_change_password: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -58,6 +60,10 @@ class AccountCreate(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=8)
     role: UserRole = UserRole.STUDENT
+    school_id: Optional[str] = None
+    department: Optional[str] = None
+    year_level: Optional[int] = Field(None, ge=1, le=4)
+    section: Optional[str] = None
 
 
 class AccountUpdate(BaseModel):
@@ -71,6 +77,28 @@ class PasswordChangeRequest(BaseModel):
     """Password change request."""
     current_password: str
     new_password: str = Field(..., min_length=8)
+
+
+class ForgotPasswordRequest(BaseModel):
+    """Request a password reset for an existing account."""
+    email: EmailStr
+
+
+class ForgotPasswordResponse(BaseModel):
+    """Local dev-only password reset response."""
+    message: str
+    reset_token: Optional[str] = None
+
+
+class ResetPasswordRequest(BaseModel):
+    """Reset a password using a valid reset token."""
+    token: str
+    new_password: str = Field(..., min_length=8)
+
+
+class ResetPasswordResponse(BaseModel):
+    """Password reset confirmation."""
+    message: str
 
 
 # Forward references

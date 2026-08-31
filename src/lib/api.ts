@@ -25,6 +25,7 @@ import type {
   Account,
   ApiError,
 } from "@/types";
+import { mockLogin, mockMe, mockLogout } from "@/lib/mockAuth";
 
 // ─── Base Fetch Helper ────────────────────────────────────────────────────────
 
@@ -64,6 +65,28 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
+const fallbackToMock = async <T>(
+  backendCall: () => Promise<T>,
+  mockCall: () => Promise<T>,
+): Promise<T> => {
+  try {
+    return await backendCall();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error ?? "");
+    const isNetworkFailure =
+      error instanceof TypeError ||
+      message.toLowerCase().includes("failed to fetch") ||
+      message.toLowerCase().includes("network") ||
+      message.toLowerCase().includes("load failed");
+
+    if (isNetworkFailure) {
+      return await mockCall();
+    }
+
+    throw error;
+  }
+};
+
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 // POST /auth/login    → classifies credential (student number / email) server-side
 // POST /auth/logout
@@ -71,11 +94,43 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
 export const authApi = {
   login: (payload: LoginPayload) =>
-    request<AuthSession>("/auth/login", { method: "POST", body: JSON.stringify(payload) }),
+    fallbackToMock(
+      () => request<AuthSession>("/auth/login", { method: "POST", body: JSON.stringify(payload) }),
+      () => mockLogin(payload),
+    ),
 
-  logout: () => request<void>("/auth/logout", { method: "POST" }),
+  forgotPassword: (email: string) =>
+    fallbackToMock(
+      () => request<{ message: string; reset_token?: string }>("/auth/forgot-password", {
+        method: "POST",
+        body: JSON.stringify({ email }),
+      }),
+      () => import("@/lib/mockAuth").then(({ mockForgotPassword }) => mockForgotPassword(email)),
+    ),
 
-  me: () => request<AuthSession>("/auth/me"),
+  resetPassword: (token: string, newPassword: string) =>
+    fallbackToMock(
+      () => request<{ message: string }>("/auth/reset-password", {
+        method: "POST",
+        body: JSON.stringify({ token, new_password: newPassword }),
+      }),
+      () => import("@/lib/mockAuth").then(({ mockResetPassword }) => mockResetPassword(token, newPassword)),
+    ),
+
+  logout: () =>
+    fallbackToMock(
+      () => request<void>("/auth/logout", { method: "POST" }),
+      () => mockLogout(),
+    ),
+
+  me: () =>
+    fallbackToMock(
+      () => request<AuthSession>("/auth/me"),
+      () => mockMe().then((session) => {
+        if (!session) throw new Error("No mock session available");
+        return session;
+      }),
+    ),
 };
 
 // ─── Student ──────────────────────────────────────────────────────────────────

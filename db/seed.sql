@@ -29,7 +29,7 @@ INSERT INTO faculty (school_id, account_id, department, is_superadmin, position,
 ON CONFLICT (school_id) DO NOTHING;
 
 -- ─── Clearance DAG Nodes ──────────────────────────────────────────────────────
--- Standard clearance flow: Library → Finance, OSAS → Dept Head → Registrar
+-- Standard clearance flow: Library → Finance, SAS → Dept Head → Registrar
 -- Medical → Registrar (parallel path)
 
 INSERT INTO clearance_nodes (id, label, office, position_x, position_y, created_at) VALUES
@@ -39,9 +39,9 @@ INSERT INTO clearance_nodes (id, label, office, position_x, position_y, created_
 
 -- Row 2: Depends on Library
 ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3', 'Finance',      'Accounting Office',            80, 210, NOW()),
-('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa4', 'OSAS',         'Student Affairs Office',       310, 210, NOW()),
+('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa4', 'SAS',          'Student Affairs Office',       310, 210, NOW()),
 
--- Row 3: Depends on Finance + OSAS
+-- Row 3: Depends on Finance + SAS
 ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa5', 'Dept Head',    'Department Office',            195, 360, NOW()),
 
 -- Row 4: Depends on Dept Head + Medical
@@ -51,15 +51,15 @@ ON CONFLICT (id) DO NOTHING;
 -- ─── Clearance DAG Edges (Prerequisite Rules) ─────────────────────────────────
 INSERT INTO clearance_edges (id, from_node_id, to_node_id, created_at) VALUES
 ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb1', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3', NOW()),  -- Library → Finance
-('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb2', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa4', NOW()),  -- Library → OSAS
+('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb2', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa4', NOW()),  -- Library → SAS
 ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb3', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa5', NOW()),  -- Finance → Dept Head
-('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb4', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa4', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa5', NOW()),  -- OSAS → Dept Head
+('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb4', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa4', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa5', NOW()),  -- SAS → Dept Head
 ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb5', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa6', NOW()),  -- Medical → Registrar
 ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb6', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa5', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa6', NOW())   -- Dept Head → Registrar
 ON CONFLICT (id) DO NOTHING;
 
 -- ─── Initial Clearance Requests for Demo Student ──────────────────────────────
--- Student has completed Library & Medical, currently at Finance & OSAS
+-- Student has completed Library & Medical, currently at Finance & SAS
 INSERT INTO clearance_requests (id, student_account_id, node_id, faculty_account_id, status, hold_reason, submitted_at, approved_at) VALUES
 -- Completed: Library
 ('cccccccc-cccc-cccc-cccc-ccccccccccc1', '11111111-1111-1111-1111-111111111111', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1', '22222222-2222-2222-2222-222222222222', 'approved', NULL, '2026-08-18 10:00:00+00', '2026-08-18 10:30:00+00'),
@@ -70,10 +70,10 @@ INSERT INTO clearance_requests (id, student_account_id, node_id, faculty_account
 -- Active: Finance (eligible - Library done)
 ('cccccccc-cccc-cccc-cccc-ccccccccccc3', '11111111-1111-1111-1111-111111111111', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3', NULL, 'pending', NULL, '2026-08-26 08:00:00+00', NULL),
 
--- Active: OSAS (eligible - Library done)
+-- Active: SAS (eligible - Library done)
 ('cccccccc-cccc-cccc-cccc-ccccccccccc4', '11111111-1111-1111-1111-111111111111', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa4', NULL, 'pending', NULL, '2026-08-26 08:00:00+00', NULL),
 
--- Locked: Dept Head (needs Finance + OSAS)
+-- Locked: Dept Head (needs Finance + SAS)
 ('cccccccc-cccc-cccc-cccc-ccccccccccc5', '11111111-1111-1111-1111-111111111111', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa5', NULL, 'locked', NULL, NULL, NULL),
 
 -- Locked: Registrar (needs Dept Head + Medical)

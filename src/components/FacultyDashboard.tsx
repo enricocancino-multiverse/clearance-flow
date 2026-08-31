@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { DeptKey, DEPT_CONFIG } from "../types";
 import { useTheme } from "../context/ThemeContext";
+import { INITIAL_QUEUE, useLiveDashboardState } from "../lib/liveDashboardState";
 
 interface Props {
   deptName: string;
@@ -99,12 +100,24 @@ export default function FacultyDashboard({
   onViewProfile,
 }: Props) {
   const { isDark } = useTheme();
+  const { state, setAvailability, setQueue } = useLiveDashboardState();
   const cfg = DEPT_CONFIG[deptKey];
-  const [availability, setAvailability] = useState<Availability>("accepting");
+  const [availability, setAvailabilityLocal] = useState<Availability>(state.facultyAvailability as Availability);
   const [students, setStudents] = useState<StudentRequest[]>(STUDENTS);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [holdReason, setHoldReason] = useState("");
   const [holdTarget, setHoldTarget] = useState<string | null>(null);
+  const [schedule, setSchedule] = useState([
+    { id: 1, office: "SAS", day: "Tue, Aug 26", time: "1:00 – 3:00 PM", slot: 7, total: 20 },
+    { id: 2, office: cfg.label, day: "Wed, Aug 27", time: "9:00 – 11:00 AM", slot: 3, total: 12 },
+  ]);
+  const [scheduleDraft, setScheduleDraft] = useState({
+    office: cfg.label,
+    day: "Wed, Aug 27",
+    time: "9:00 – 11:00 AM",
+    slot: 3,
+    total: 12,
+  });
 
   const bg = isDark ? "bg-slate-950" : "bg-gray-50";
   const navBg = isDark ? "bg-slate-900/80 border-slate-800" : "bg-white/90 border-gray-200";
@@ -130,6 +143,43 @@ export default function FacultyDashboard({
   const pending = students.filter(s => s.status === "pending").length;
   const approved = students.filter(s => s.status === "approved").length;
   const held = students.filter(s => s.status === "held").length;
+
+  const handleAvailabilityChange = (next: Availability) => {
+    setAvailabilityLocal(next);
+    setAvailability(next);
+    setQueue(state.queue.length ? state.queue : INITIAL_QUEUE);
+  };
+
+  const addScheduleEntry = () => {
+    if (!scheduleDraft.office.trim() || !scheduleDraft.day.trim() || !scheduleDraft.time.trim()) return;
+    const nextEntry = {
+      id: Date.now(),
+      office: scheduleDraft.office,
+      day: scheduleDraft.day,
+      time: scheduleDraft.time,
+      slot: Math.max(1, scheduleDraft.slot),
+      total: Math.max(1, scheduleDraft.total),
+    };
+    setSchedule(prev => [nextEntry, ...prev]);
+    setScheduleDraft({
+      office: cfg.label,
+      day: "Wed, Aug 27",
+      time: "9:00 – 11:00 AM",
+      slot: 3,
+      total: 12,
+    });
+    setQueue([
+      {
+        id: Date.now() + 1,
+        office: nextEntry.office,
+        date: nextEntry.day,
+        time: nextEntry.time,
+        slot: nextEntry.slot,
+        total: nextEntry.total,
+      },
+      ...state.queue,
+    ]);
+  };
 
   const availConfig: Record<
     Availability,
@@ -204,7 +254,7 @@ export default function FacultyDashboard({
               return (
                 <button
                   key={a}
-                  onClick={() => setAvailability(a)}
+                  onClick={() => handleAvailabilityChange(a)}
                   className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200"
                   style={
                     availability === a
@@ -221,6 +271,81 @@ export default function FacultyDashboard({
       </header>
 
       <div className="max-w-6xl mx-auto px-6 py-6">
+        <div className={`rounded-2xl border p-5 mb-6 ${card}`}>
+          <div className="flex items-center justify-between gap-4 mb-4">
+            <div>
+              <h2 className={`text-sm font-bold ${text}`}>Office Schedule Planner</h2>
+              <p className={`text-xs mt-0.5 ${muted}`} style={{ fontFamily: "Inter, sans-serif" }}>
+                Add your available sign-off windows for students and exam clearances.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <input
+              value={scheduleDraft.office}
+              onChange={e => setScheduleDraft(prev => ({ ...prev, office: e.target.value }))}
+              placeholder="Office"
+              className={`rounded-lg border px-3 py-2 text-xs ${isDark ? "bg-slate-800 border-slate-700 text-slate-100" : "bg-white border-gray-300 text-gray-900"}`}
+            />
+            <input
+              value={scheduleDraft.day}
+              onChange={e => setScheduleDraft(prev => ({ ...prev, day: e.target.value }))}
+              placeholder="Day"
+              className={`rounded-lg border px-3 py-2 text-xs ${isDark ? "bg-slate-800 border-slate-700 text-slate-100" : "bg-white border-gray-300 text-gray-900"}`}
+            />
+            <input
+              value={scheduleDraft.time}
+              onChange={e => setScheduleDraft(prev => ({ ...prev, time: e.target.value }))}
+              placeholder="Time"
+              className={`rounded-lg border px-3 py-2 text-xs ${isDark ? "bg-slate-800 border-slate-700 text-slate-100" : "bg-white border-gray-300 text-gray-900"}`}
+            />
+            <input
+              type="number"
+              min={1}
+              value={scheduleDraft.slot}
+              onChange={e => setScheduleDraft(prev => ({ ...prev, slot: Number(e.target.value || 1) }))}
+              placeholder="Slot"
+              className={`rounded-lg border px-3 py-2 text-xs ${isDark ? "bg-slate-800 border-slate-700 text-slate-100" : "bg-white border-gray-300 text-gray-900"}`}
+            />
+            <input
+              type="number"
+              min={1}
+              value={scheduleDraft.total}
+              onChange={e => setScheduleDraft(prev => ({ ...prev, total: Number(e.target.value || 1) }))}
+              placeholder="Total"
+              className={`rounded-lg border px-3 py-2 text-xs ${isDark ? "bg-slate-800 border-slate-700 text-slate-100" : "bg-white border-gray-300 text-gray-900"}`}
+            />
+          </div>
+
+          <div className="mt-4 flex items-center justify-between gap-3">
+            <div className={`text-[10px] uppercase tracking-[0.2em] ${muted}`}>
+              {schedule.length} active windows
+            </div>
+            <button
+              onClick={addScheduleEntry}
+              className="px-4 py-2 rounded-lg text-xs font-bold text-blue-400 border border-blue-900 bg-blue-950/30 hover:bg-blue-950/60 transition-all"
+            >
+              + Add Schedule
+            </button>
+          </div>
+
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+            {schedule.map(slot => (
+              <div key={slot.id} className={`rounded-xl border p-3 ${isDark ? "border-slate-700 bg-slate-800/50" : "border-gray-200 bg-gray-50"}`}>
+                <div className="flex items-center justify-between gap-2">
+                  <div className={`text-xs font-bold ${text}`}>{slot.office}</div>
+                  <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500">{slot.day}</div>
+                </div>
+                <div className={`mt-2 text-xs ${muted}`} style={{ fontFamily: "Inter, sans-serif" }}>{slot.time}</div>
+                <div className={`mt-2 text-[11px] font-mono ${text}`} style={{ fontFamily: "JetBrains Mono, monospace" }}>
+                  Queue {slot.slot}/{slot.total}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* Stats row */}
         <div className="grid grid-cols-4 gap-4 mb-6">
           {[
@@ -442,7 +567,7 @@ function StudentRow({
                 { label: "Library", done: true },
                 { label: "Medical", done: true },
                 { label: "Finance", done: student.prereqsDone >= 3 },
-                { label: "OSAS", done: student.prereqsDone >= 4 },
+                { label: "SAS", done: student.prereqsDone >= 4 },
                 { label: "Dept Head", done: student.prereqsDone >= 5 },
               ].map(dep => (
                 <div key={dep.label} className="flex items-center gap-2 text-xs" style={{ fontFamily: "Inter, sans-serif" }}>

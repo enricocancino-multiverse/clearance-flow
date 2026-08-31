@@ -15,15 +15,23 @@ from app.core.database import get_session
 from app.core.security import (
     create_access_token,
     create_refresh_token,
+    create_reset_token,
     create_token_pair,
+    decode_reset_token,
     decode_token,
+    get_password_hash,
     verify_password,
 )
-from app.models.account import Account, UserRole
+from app.models.account import Account, Student, UserRole
 from app.schemas.auth import (
+    AccountCreate,
     AccountResponse,
+    ForgotPasswordRequest,
+    ForgotPasswordResponse,
     LoginRequest,
     LoginResponse,
+    ResetPasswordRequest,
+    ResetPasswordResponse,
     TokenRefreshRequest,
     TokenResponse,
 )
@@ -31,6 +39,9 @@ from app.schemas.auth import (
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 security = HTTPBearer(auto_error=False)
 settings = get_settings()
+
+# Local dev-only password reset registry. No SMTP/domain is required in development.
+RESET_TOKENS: dict[str, str] = {}
 
 
 def classify_credential(credential: str) -> tuple[UserRole, str]:
@@ -178,6 +189,7 @@ async def login(
             __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
             + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
         ),
+        must_change_password=account.must_change_password,
     )
 
 
@@ -206,6 +218,130 @@ async def refresh_token(
         access_token=access_token,
         refresh_token=refresh_token,
     )
+
+
+@router.post("/create-account")
+async def create_account(
+    payload: AccountCreate,
+    session: AsyncSession = Depends(get_session),
+    current: Account = Depends(get_current_account),
+) -> dict:
+    """Create a new account for a student or faculty with a secure temporary password."""
+    if current.role != UserRole.SUPERADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only superadmins can create accounts.",
+        )
+
+    existing = await session.execute(select(Account).where(Account.email == payload.email.lower()))
+    if existing.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Account already exists.",
+        )
+
+    generated_password = payload.password or "TempPass123!"
+    account = Account(
+        email=payload.email.lower(),
+        role=payload.role,
+        hashed_password=get_password_hash(generated_password),
+        must_change_password=True,
+    )
+    session.add(account)
+    await session.flush()
+
+    if payload.role == UserRole.STUDENT:
+        student = Student(
+            school_id=(payload.school_id or f"{__import__('datetime').datetime.now(__import__('datetime').timezone.utc).year}-STU-{str(len(await session.execute(select(Student))) + 1).zfill(3)}").upper(),
+            account_id=account.id,
+            department=payload.department or "cs",
+            year_level=payload.year_level or 1,
+            section=payload.section or "BSCS-1A",
+        )
+        session.add(student)
+    else:
+        from app.models.account import Faculty, Department, AvailabilityStatus
+
+        faculty = Faculty(
+            school_id=(payload.school_id or f"FAC-{__import__('datetime').datetime.now(__import__('datetime').timezone.utc).year}-001").upper(),
+            account_id=account.id,
+            department=payload.department or "cs",
+            is_superadmin=False,
+            position="Faculty Member",
+            availability=AvailabilityStatus.ACCEPTING,
+        )
+        session.add(faculty)
+
+    await session.commit()
+
+    return {
+        "account_id": str(account.id),
+        "email": account.email,
+        "role": account.role.value,
+        "school_id": payload.school_id or "generated",
+        "temporary_password": generated_password,
+        "must_change_password": True,
+    }
+
+
+@router.post("/forgot-password", response_model=ForgotPasswordResponse)
+async def forgot_password(
+    payload: ForgotPasswordRequest,
+    session: AsyncSession = Depends(get_session),
+) -> ForgotPasswordResponse:
+    """Create a local reset token for a known account without needing a real email domain."""
+    email = payload.email.lower().strip()
+    result = await session.execute(select(Account).where(Account.email == email))
+    account = result.scalar_one_or_none()
+
+    if not account:
+        return ForgotPasswordResponse(
+            message="Password reset instructions sent.",
+            reset_token=None,
+        )
+
+    token = create_reset_token(str(account.id))
+    RESET_TOKENS[token] = str(account.id)
+    return ForgotPasswordResponse(
+        message="Password reset instructions sent.",
+        reset_token=token,
+    )
+
+
+@router.post("/reset-password", response_model=ResetPasswordResponse)
+async def reset_password(
+    payload: ResetPasswordRequest,
+    session: AsyncSession = Depends(get_session),
+) -> ResetPasswordResponse:
+    """Validate a reset token and change the user's password."""
+    try:
+        reset_payload = decode_reset_token(payload.token)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired reset token",
+        ) from exc
+
+    account_id = reset_payload.sub
+    if RESET_TOKENS.get(payload.token) != account_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired reset token",
+        )
+
+    account = await session.get(Account, account_id)
+    if not account:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired reset token",
+        )
+
+    account.hashed_password = get_password_hash(payload.new_password)
+    account.must_change_password = False
+    await session.commit()
+    RESET_TOKENS.pop(payload.token, None)
+
+    return ResetPasswordResponse(message="Password reset successfully.")
 
 
 @router.post("/logout")
@@ -259,4 +395,5 @@ async def get_me(
             __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
             + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
         ),
+        must_change_password=account.must_change_password,
     )

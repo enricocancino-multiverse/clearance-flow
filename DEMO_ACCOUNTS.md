@@ -72,7 +72,7 @@ The seed data populates a **6-node Directed Acyclic Graph** representing the sta
      │                                        │
      ▼                                        │
 ┌─────────┐       ┌─────────┐                 │
-│ Medical │──────▶│  OSAS   │─────────────────┘
+│ Medical │──────▶│   SAS   │─────────────────┘
 │ (done)  │       │(active) │
 └─────────┘       └─────────┘
 ```
@@ -84,8 +84,8 @@ The seed data populates a **6-node Directed Acyclic Graph** representing the sta
 | `aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1` | Library | University Library | (160, 70) | — |
 | `aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2` | Medical | Health Services Unit | (490, 70) | — |
 | `aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3` | Finance | Accounting Office | (80, 210) | Library |
-| `aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa4` | OSAS | Student Affairs Office | (310, 210) | Library |
-| `aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa5` | Dept Head | Department Office | (195, 360) | Finance, OSAS |
+| `aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa4` | SAS | Student Affairs Office | (310, 210) | Library |
+| `aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa5` | Dept Head | Department Office | (195, 360) | Finance, SAS |
 | `aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa6` | Registrar | Registrar's Office | (370, 480) | Dept Head, Medical |
 
 ### Edge Rules (Prerequisites)
@@ -93,9 +93,9 @@ The seed data populates a **6-node Directed Acyclic Graph** representing the sta
 | From | To | Rule |
 |------|-----|------|
 | Library | Finance | Must clear Library before Finance |
-| Library | OSAS | Must clear Library before OSAS |
+| Library | SAS | Must clear Library before SAS |
 | Finance | Dept Head | Must clear Finance before Dept Head |
-| OSAS | Dept Head | Must clear OSAS before Dept Head |
+| SAS | Dept Head | Must clear SAS before Dept Head |
 | Medical | Registrar | Must clear Medical before Registrar |
 | Dept Head | Registrar | Must clear Dept Head before Registrar |
 
@@ -108,14 +108,14 @@ The seed data populates a **6-node Directed Acyclic Graph** representing the sta
 | Library | ✅ **Approved** | Aug 18, 2026 |
 | Medical | ✅ **Approved** | Aug 19, 2026 |
 | Finance | ⚡ **Pending** (Eligible) | — |
-| OSAS | ⚡ **Pending** (Eligible) | — |
+| SAS | ⚡ **Pending** (Eligible) | — |
 | Dept Head | 🔒 **Locked** | — |
 | Registrar | 🔒 **Locked** | — |
 
 **Overall Progress**: 33% (2/6 completed)
 
-- **Next Eligible Actions**: Finance Office, OSAS (both unlocked — Library prerequisite met)
-- **Blocked**: Dept Head (needs Finance + OSAS), Registrar (needs Dept Head + Medical)
+- **Next Eligible Actions**: Finance Office, SAS (both unlocked — Library prerequisite met)
+- **Blocked**: Dept Head (needs Finance + SAS), Registrar (needs Dept Head + Medical)
 
 ---
 
@@ -183,7 +183,7 @@ Profiling data from C++ module (simulated):
 - [ ] **Faculty Login**: `faculty@clearanceflow.edu` / `password123` → redirects to `/dashboard/faculty`
 - [ ] **SuperAdmin Login**: `admin@clearanceflow.edu` / `password123` → redirects to `/dashboard/admin`
 - [ ] Student sees: DAG with 2 completed, 2 active, 2 locked nodes
-- [ ] Student sees: 2 upcoming schedule slots (Finance, OSAS)
+- [ ] Student sees: 2 upcoming schedule slots (Finance, SAS)
 - [ ] Faculty sees: 5 requests in priority queue with expandable detail
 - [ ] Faculty can: Approve, Hold (with reason), toggle availability
 - [ ] SuperAdmin sees: Graph builder (view/draw/delete modes), Metrics charts, User management

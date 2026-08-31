@@ -25,3 +25,52 @@ body {
   color: var(--foreground);
   font-family: "Inter", sans-serif;
 }
+
+@keyframes gentlePulse {
+  0%, 100% { opacity: 0.8; }
+  50% { opacity: 1; }
+}
+
+@keyframes graphHalo {
+  0%, 100% { filter: drop-shadow(0 0 6px rgba(59, 130, 246, 0.25)); }
+  50% { filter: drop-shadow(0 0 12px rgba(59, 130, 246, 0.6)); }
+}
+
+svg .graph-node {
+  transform-origin: center;
+  opacity: 1;
+}
+
+svg .graph-edge {
+  stroke-dasharray: none;
+  animation: none;
+  opacity: 0.9;
+}
+
+svg .graph-glow {
+  animation: graphHalo 4s ease-in-out infinite;
+  filter: drop-shadow(0 0 6px rgba(59, 130, 246, 0.25));
+}
+
+.custom-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.5) transparent;
+}
+
+.custom-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.custom-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scroll::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.45);
+  border-radius: 999px;
+}
+
+.custom-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.7);
+}
