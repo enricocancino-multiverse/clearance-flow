@@ -69,7 +69,6 @@ export default function FacultyDashboard() {
       deptName={cfg.label}
       deptKey={faculty.department}
       facultyName={faculty.position || account.email.split("@")[0]}
-      onBack={handleBack}
       onViewProfile={() => setView("profile")}
       onFreespace={() => router.push("/freespace")}
       onSignOut={() => {

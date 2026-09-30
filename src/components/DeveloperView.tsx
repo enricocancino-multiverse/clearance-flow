@@ -102,7 +102,7 @@ export default function DeveloperView() {
     }
 
     if (surface === "admin") {
-      return <AdminDashboard onBack={backToRole} onViewProfile={() => { setViewingProfile(ownProfile); setSurface("profile"); }} />;
+      return <AdminDashboard onViewProfile={() => { setViewingProfile(ownProfile); setSurface("profile"); }} onFreespace={() => chooseSurface("freespace")} onSignOut={() => router.push("/")} />;
     }
 
     if (surface === "faculty") {
@@ -112,7 +112,6 @@ export default function DeveloperView() {
           deptName={DEPT_CONFIG[faculty.department].label}
           deptKey={faculty.department}
           facultyName={faculty.position}
-          onBack={backToRole}
           onViewProfile={() => { setViewingProfile(ownProfile); setSurface("profile"); }}
           onFreespace={() => chooseSurface("freespace")}
           onSignOut={() => router.push("/")}

@@ -394,13 +394,6 @@ export default function Landing() {
                 <span className="block text-[10px] text-slate-400 mt-1">Selected demo accounts auto-fill this password.</span>
               </p>
 
-              <button
-                type="button"
-                onClick={() => router.push("/developer")}
-                className="mt-4 w-full rounded-xl border border-dashed border-blue-200 bg-blue-50 px-3 py-2.5 text-xs font-semibold text-blue-700 transition hover:border-blue-300 hover:bg-blue-100"
-              >
-                Open developer view — no sign-in required
-              </button>
             </div>
 
             <p className="text-center text-xs text-slate-400 mt-5" style={{ fontFamily: "var(--font-geist-sans)" }}>

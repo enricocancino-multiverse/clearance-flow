@@ -66,6 +66,7 @@ export default function StudentDashboard({
   const { state } = useLiveDashboardState();
   const cfg = DEPT_CONFIG[dept];
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
+  const [officeHoursOpen, setOfficeHoursOpen] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const dragRef = useRef<{ x: number; y: number; originX: number; originY: number } | null>(null);
@@ -323,44 +324,6 @@ export default function StudentDashboard({
             </div>
           </div>
 
-          {/* Schedule queue */}
-          <div className={`rounded-2xl border p-5 ${card}`}>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className={`text-sm font-semibold ${text}`}>Assigned Sign-Off Windows</h3>
-              <span className={`text-xs font-mono ${muted}`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                {queue.length} upcoming
-              </span>
-            </div>
-            <div className="space-y-3">
-              {queue.map(q => (
-                <div
-                  key={q.id}
-                  className="rounded-xl p-3 border transition-all"
-                  style={{ background: `${cfg.color}0d`, borderColor: `${cfg.color}30` }}
-                >
-                  <div className={`text-xs font-bold ${text} mb-1`}>{q.office}</div>
-                  <div className={`text-xs mb-2 ${muted}`} style={{ fontFamily: 'Inter, sans-serif' }}>
-                    {q.date} · {q.time}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className={`flex-1 h-1.5 rounded-full ${isDark ? 'bg-slate-800' : 'bg-gray-200'}`}>
-                      <div
-                        className="h-full rounded-full"
-                        style={{
-                          width: `${(q.slot / q.total) * 100}%`,
-                          background: cfg.color,
-                        }}
-                      />
-                    </div>
-                    <span className={`text-xs font-mono ${muted}`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                      #{q.slot}/{q.total}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
           {/* Action prompt */}
           <div className={`rounded-2xl border p-5 ${card}`}>
             <h3 className={`text-sm font-semibold ${text} mb-1`}>Next Action</h3>
@@ -370,6 +333,8 @@ export default function StudentDashboard({
               completed prerequisites.
             </p>
             <button
+              type="button"
+              onClick={() => setOfficeHoursOpen(true)}
               className="w-full py-2 rounded-lg text-xs font-bold transition-all hover:opacity-90"
               style={{ background: cfg.color, color: '#fff' }}
             >
@@ -378,6 +343,34 @@ export default function StudentDashboard({
           </div>
         </div>
       </div>
+
+      {officeHoursOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4" role="dialog" aria-modal="true" aria-labelledby="office-hours-title">
+          <div className={`w-full max-w-lg rounded-2xl border p-5 shadow-2xl ${card}`}>
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h2 id="office-hours-title" className={`text-lg font-bold ${text}`}>Office Hours</h2>
+                <p className={`mt-1 text-xs ${muted}`}>Assigned sign-off windows available to you.</p>
+              </div>
+              <button type="button" onClick={() => setOfficeHoursOpen(false)} className={`text-xl ${muted}`} aria-label="Close office hours">×</button>
+            </div>
+            <div className="space-y-3">
+              {queue.map(q => (
+                <div key={q.id} className="rounded-xl border p-3" style={{ background: `${cfg.color}0d`, borderColor: `${cfg.color}30` }}>
+                  <div className={`mb-1 text-xs font-bold ${text}`}>{q.office}</div>
+                  <div className={`mb-2 text-xs ${muted}`} style={{ fontFamily: 'Inter, sans-serif' }}>{q.date} · {q.time}</div>
+                  <div className="flex items-center gap-2">
+                    <div className={`h-1.5 flex-1 rounded-full ${isDark ? 'bg-slate-800' : 'bg-gray-200'}`}>
+                      <div className="h-full rounded-full" style={{ width: `${(q.slot / q.total) * 100}%`, background: cfg.color }} />
+                    </div>
+                    <span className={`text-xs font-mono ${muted}`} style={{ fontFamily: 'JetBrains Mono, monospace' }}>#{q.slot}/{q.total}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -66,8 +66,12 @@ export default function AdminDashboard() {
 
   return (
     <AdminDashboardComponent
-      onBack={handleBack}
       onViewProfile={() => setView("profile")}
+      onFreespace={() => router.push("/freespace")}
+      onSignOut={() => {
+        logout();
+        router.replace("/");
+      }}
     />
   );
 }

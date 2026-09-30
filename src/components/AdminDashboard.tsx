@@ -5,8 +5,9 @@ import { useLiveDashboardState } from "../lib/liveDashboardState";
 import { DEPT_CONFIG, DeptKey } from "../types";
 
 interface Props {
-  onBack: () => void;
   onViewProfile: () => void;
+  onFreespace: () => void;
+  onSignOut: () => void;
 }
 
 interface GraphNode {
@@ -58,7 +59,7 @@ const DEPT_COUNTS = [
 
 type Tab = "graph" | "metrics" | "users";
 
-export default function AdminDashboard({ onBack, onViewProfile }: Props) {
+export default function AdminDashboard({ onViewProfile, onFreespace, onSignOut }: Props) {
   const { isDark } = useTheme();
   const { state, setGraph } = useLiveDashboardState();
   const [nodes, setNodes] = useState<GraphNode[]>(state.graphNodes.length ? state.graphNodes as GraphNode[] : INITIAL_NODES);
@@ -187,12 +188,6 @@ export default function AdminDashboard({ onBack, onViewProfile }: Props) {
       {/* Header */}
       <header className={`border-b backdrop-blur-md sticky top-0 z-20 ${navBg}`}>
         <div className="max-w-7xl mx-auto px-6 py-3 flex items-center gap-4">
-          <button onClick={onBack} className={`${muted} hover:${text} transition-colors`}>
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M19 12H5M12 5l-7 7 7 7" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-
           <div className="flex items-center gap-3">
             <button
               onClick={onViewProfile}
@@ -232,6 +227,27 @@ export default function AdminDashboard({ onBack, onViewProfile }: Props) {
               </button>
             ))}
           </div>
+          <button
+            type="button"
+            onClick={onFreespace}
+            title="Open Freespace"
+            aria-label="Open Freespace"
+            className={`rounded-lg p-2 transition ${muted} hover:bg-emerald-500/10 hover:text-emerald-400`}
+          >
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <circle cx="17" cy="7" r="3" />
+              <circle cx="7" cy="17" r="3" />
+              <circle cx="17" cy="17" r="3" />
+              <circle cx="7" cy="7" r="3" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onClick={onSignOut}
+            className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${muted} hover:bg-rose-500/10 hover:text-rose-400`}
+          >
+            Sign out
+          </button>
         </div>
       </header>
 
