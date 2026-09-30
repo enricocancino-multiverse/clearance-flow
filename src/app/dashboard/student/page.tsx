@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
 import StudentDashboardComponent from "@/components/StudentDashboard";
+import FreespaceDashboard from "@/components/FreespaceDashboard";
 import ProfilePage from "@/components/ProfilePage";
-import StudentDirectory from "@/components/StudentDirectory";
 import type { ProfileData } from "@/components/ProfilePage";
 import { DEPT_CONFIG } from "@/types";
 
@@ -83,10 +83,12 @@ export default function StudentDashboard() {
 
   if (view === "directory") {
     return (
-      <StudentDirectory
+      <FreespaceDashboard
+        initialView="directory"
+        currentUserId={account.account_id}
+        currentUserName={account.email.split("@")[0]}
         onBack={handleBack}
         onViewProfile={handleViewProfile}
-        currentUserId={account.account_id}
       />
     );
   }
@@ -101,6 +103,10 @@ export default function StudentDashboard() {
       dept={student.department}
       onViewProfile={() => handleViewProfile(userProfile)}
       onBrowse={() => setView("directory")}
+      onSignOut={() => {
+        logout();
+        router.replace("/");
+      }}
     />
   );
 }

@@ -13,6 +13,7 @@ interface Props {
   dept: DeptKey;
   onViewProfile: () => void;
   onBrowse: () => void;
+  onSignOut: () => void;
 }
 
 type NodeStatus = 'completed' | 'active' | 'locked';
@@ -59,6 +60,7 @@ export default function StudentDashboard({
   dept,
   onViewProfile,
   onBrowse,
+  onSignOut,
 }: Props) {
   const { isDark, toggle } = useTheme();
   const { state } = useLiveDashboardState();
@@ -193,6 +195,18 @@ export default function StudentDashboard({
             title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
           >
             {isDark ? '☀️' : '🌙'}
+          </button>
+
+          <button
+            type="button"
+            onClick={onSignOut}
+            className={`hidden rounded-lg px-3 py-2 text-xs font-semibold transition sm:inline-flex ${
+              isDark
+                ? 'text-slate-400 hover:bg-rose-500/10 hover:text-rose-300'
+                : 'text-slate-500 hover:bg-rose-50 hover:text-rose-600'
+            }`}
+          >
+            Sign out
           </button>
         </div>
       </header>

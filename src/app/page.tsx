@@ -39,9 +39,9 @@ function classify(credential: string): { view: ViewType; dept: DeptKey } {
 }
 
 const HINTS = [
-  { label: "Student", credential: "2026-STU-001", color: "#3B82F6" },
-  { label: "Faculty", credential: "faculty@clearanceflow.edu", color: "#10B981" },
-  { label: "Admin", credential: "admin@clearanceflow.edu", color: "#8B5CF6" },
+  { label: "Student", credential: "2026-STU-001", color: DEPT_CONFIG.cs.color },
+  { label: "Faculty", credential: "faculty@clearanceflow.edu", color: DEPT_CONFIG.basiced.color },
+  { label: "Admin", credential: "admin@clearanceflow.edu", color: DEPT_CONFIG.tesda.color },
 ];
 
 export default function Landing() {
@@ -74,8 +74,8 @@ export default function Landing() {
   const detectedColor = isStudent
     ? DEPT_CONFIG[dept].color
     : detected?.view === "faculty"
-    ? "#10B981"
-    : "#8B5CF6";
+    ? DEPT_CONFIG.basiced.color
+    : DEPT_CONFIG.tesda.color;
 
   const handleLogin = async (credentialOverride?: string, passwordOverride?: string) => {
     const loginCredential = credentialOverride ?? credential;
@@ -319,7 +319,7 @@ export default function Landing() {
                 style={{
                   background: detected
                     ? `linear-gradient(135deg, ${detectedColor}cc, ${detectedColor})`
-                    : "linear-gradient(135deg, #1d4ed8, #3B82F6)",
+                    : `linear-gradient(135deg, #1d4ed8, ${DEPT_CONFIG.cs.color})`,
                   fontFamily: "var(--font-geist-sans)",
                 }}
               >
@@ -393,6 +393,14 @@ export default function Landing() {
                 Demo password: <span className="font-semibold text-slate-700">password123</span>
                 <span className="block text-[10px] text-slate-400 mt-1">Selected demo accounts auto-fill this password.</span>
               </p>
+
+              <button
+                type="button"
+                onClick={() => router.push("/developer")}
+                className="mt-4 w-full rounded-xl border border-dashed border-blue-200 bg-blue-50 px-3 py-2.5 text-xs font-semibold text-blue-700 transition hover:border-blue-300 hover:bg-blue-100"
+              >
+                Open developer view — no sign-in required
+              </button>
             </div>
 
             <p className="text-center text-xs text-slate-400 mt-5" style={{ fontFamily: "var(--font-geist-sans)" }}>
@@ -525,6 +533,9 @@ function GraphBackground() {
     [14, 15],
   ];
   const accent = [1, 5, 9, 13];
+  const accentColor = DEPT_CONFIG.cs.color;
+  const accentColorDark = "#0ea5e9";
+  const edgeColor = "#1e3a5f";
 
   return (
     <div className="absolute inset-0">
@@ -535,13 +546,13 @@ function GraphBackground() {
             <stop offset="100%" stopColor="#020617" />
           </radialGradient>
           <radialGradient id="accentGlow" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="#3B82F6" stopOpacity="0.35" />
-            <stop offset="100%" stopColor="#3B82F6" stopOpacity="0" />
+            <stop offset="0%" stopColor={accentColor} stopOpacity="0.35" />
+            <stop offset="100%" stopColor={accentColor} stopOpacity="0" />
           </radialGradient>
         </defs>
         <rect width="680" height="580" fill="url(#bgGrad)" />
         {edges.map(([a, b], i) => (
-          <line key={i} x1={nodes[a].x} y1={nodes[a].y} x2={nodes[b].x} y2={nodes[b].y} stroke="#1e3a5f" strokeWidth="1" />
+          <line key={i} x1={nodes[a].x} y1={nodes[a].y} x2={nodes[b].x} y2={nodes[b].y} stroke={edgeColor} strokeWidth="1" />
         ))}
         {nodes.map((n, i) => (
           <g key={i}>
@@ -550,8 +561,8 @@ function GraphBackground() {
               cx={n.x}
               cy={n.y}
               r="5"
-              fill={accent.includes(i) ? "#2563eb" : "#0f2244"}
-              stroke={accent.includes(i) ? "#3B82F6" : "#1e3a5f"}
+              fill={accent.includes(i) ? accentColorDark : "#0f2244"}
+              stroke={accent.includes(i) ? accentColor : edgeColor}
               strokeWidth={accent.includes(i) ? 1.5 : 1}
             />
           </g>

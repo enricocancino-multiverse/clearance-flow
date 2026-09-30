@@ -3,16 +3,13 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import StudentDirectory from "@/components/StudentDirectory";
+import FreespaceDashboard from "@/components/FreespaceDashboard";
 import ProfilePage from "@/components/ProfilePage";
 import type { ProfileData } from "@/components/ProfilePage";
-
-type ViewType = "directory" | "profile";
 
 export default function FreespaceDirectory() {
   const router = useRouter();
   const { session, loading, logout } = useAuth();
-  const [view, setView] = useState<ViewType>("directory");
   const [viewingProfile, setViewingProfile] = useState<ProfileData | null>(null);
 
   if (loading) {
@@ -25,36 +22,31 @@ export default function FreespaceDirectory() {
   }
 
   const handleBack = () => {
-    if (view === "profile") {
-      setView("directory");
+    if (viewingProfile) {
       setViewingProfile(null);
-    } else {
-      logout();
-      router.replace("/");
+      return;
     }
+    logout();
+    router.replace("/");
   };
 
-  const handleViewProfile = (profile: ProfileData) => {
-    setViewingProfile(profile);
-    setView("profile");
-  };
-
-  if (view === "profile" && viewingProfile) {
+  if (viewingProfile) {
     return (
       <ProfilePage
         profile={viewingProfile}
         isOwner={viewingProfile.id === session.account.account_id}
         onBack={handleBack}
-        onBrowse={() => setView("directory")}
+        onBrowse={() => setViewingProfile(null)}
       />
     );
   }
 
   return (
-    <StudentDirectory
-      onBack={handleBack}
-      onViewProfile={handleViewProfile}
+    <FreespaceDashboard
       currentUserId={session.account.account_id}
+      currentUserName={session.account.email.split("@")[0]}
+      onBack={handleBack}
+      onViewProfile={setViewingProfile}
     />
   );
 }

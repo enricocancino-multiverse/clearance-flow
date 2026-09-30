@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTheme } from "../context/ThemeContext";
 import { useLiveDashboardState } from "../lib/liveDashboardState";
+import { DEPT_CONFIG, DeptKey } from "../types";
 
 interface Props {
   onBack: () => void;
@@ -48,11 +49,11 @@ const EXEC_DATA = [
 ];
 
 const DEPT_COUNTS = [
-  { dept: "CS", students: 312, pending: 48, color: "#3B82F6" },
-  { dept: "HM", students: 198, pending: 27, color: "#F97316" },
-  { dept: "CRIM", students: 245, pending: 39, color: "#EF4444" },
-  { dept: "BSED", students: 176, pending: 22, color: "#10B981" },
-  { dept: "TVOC", students: 134, pending: 18, color: "#8B5CF6" },
+  { dept: "CS", students: 312, pending: 48, color: DEPT_CONFIG.cs.color },
+  { dept: "HM", students: 198, pending: 27, color: DEPT_CONFIG.hm.color },
+  { dept: "CRIM", students: 245, pending: 39, color: DEPT_CONFIG.crim.color },
+  { dept: "BSED", students: 176, pending: 22, color: DEPT_CONFIG.basiced.color },
+  { dept: "TVOC", students: 134, pending: 18, color: DEPT_CONFIG.tesda.color },
 ];
 
 type Tab = "graph" | "metrics" | "users";
@@ -973,11 +974,11 @@ function UserManagement({
   };
 
   const departmentColors: Record<string, string> = {
-    "Computer Science": "#3B82F6",
-    "Hospitality Management": "#F97316",
-    "Criminology": "#EF4444",
-    "Basic Education (8 to K12)": "#10B981",
-    TESDA: "#8B5CF6",
+    "Computer Science": DEPT_CONFIG.cs.color,
+    "Hospitality Management": DEPT_CONFIG.hm.color,
+    "Criminology": DEPT_CONFIG.crim.color,
+    "Basic Education (8 to K12)": DEPT_CONFIG.basiced.color,
+    TESDA: DEPT_CONFIG.tesda.color,
     "General Education": "#94a3b8",
   };
 

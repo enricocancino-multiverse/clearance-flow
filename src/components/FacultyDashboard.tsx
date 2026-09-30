@@ -10,6 +10,8 @@ interface Props {
   facultyName: string;
   onBack: () => void;
   onViewProfile: () => void;
+  onFreespace: () => void;
+  onSignOut: () => void;
 }
 
 type Availability = "accepting" | "in-class" | "away";
@@ -98,12 +100,19 @@ export default function FacultyDashboard({
   facultyName,
   onBack,
   onViewProfile,
+  onFreespace,
+  onSignOut,
 }: Props) {
   const { isDark } = useTheme();
-  const { state, setAvailability, setQueue } = useLiveDashboardState();
+  const { state, setAvailability, setQueue, completeNode, setRequestDecision } = useLiveDashboardState();
   const cfg = DEPT_CONFIG[deptKey];
   const [availability, setAvailabilityLocal] = useState<Availability>(state.facultyAvailability as Availability);
-  const [students, setStudents] = useState<StudentRequest[]>(STUDENTS);
+  const [students, setStudents] = useState<StudentRequest[]>(() =>
+    STUDENTS.map(student => ({
+      ...student,
+      status: state.requestDecisions[student.id] ?? student.status,
+    }))
+  );
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [holdReason, setHoldReason] = useState("");
   const [holdTarget, setHoldTarget] = useState<string | null>(null);
@@ -127,6 +136,9 @@ export default function FacultyDashboard({
 
   const approve = (id: string) => {
     setStudents(s => s.map(x => (x.id === id ? { ...x, status: "approved" } : x)));
+    setRequestDecision(id, "approved");
+    const nextNode = state.graphNodes.find(node => node.status === "active");
+    if (nextNode) completeNode(nextNode.id);
     setExpandedId(null);
   };
 
@@ -135,6 +147,7 @@ export default function FacultyDashboard({
     setStudents(s =>
       s.map(x => (x.id === id ? { ...x, status: "held", holdReason } : x))
     );
+    setRequestDecision(id, "held");
     setHoldTarget(null);
     setHoldReason("");
     setExpandedId(null);
@@ -267,6 +280,24 @@ export default function FacultyDashboard({
               );
             })}
           </div>
+          <button
+            type="button"
+            onClick={onFreespace}
+            className={`hidden rounded-lg px-3 py-2 text-xs font-semibold transition lg:inline-flex ${
+              muted
+            } hover:bg-emerald-500/10 hover:text-emerald-400`}
+          >
+            Freespace
+          </button>
+          <button
+            type="button"
+            onClick={onSignOut}
+            className={`hidden rounded-lg px-3 py-2 text-xs font-semibold transition lg:inline-flex ${
+              muted
+            } hover:bg-rose-500/10 hover:text-rose-400`}
+          >
+            Sign out
+          </button>
         </div>
       </header>
 
@@ -344,6 +375,21 @@ export default function FacultyDashboard({
               </div>
             ))}
           </div>
+        </div>
+
+        <div className={`rounded-2xl border p-5 mb-6 ${card}`}>
+          <h2 className={`text-sm font-bold ${text}`}>Clearance Workflow</h2>
+          <p className={`mt-1 text-xs ${muted}`}>Confirm successful compliance to unlock the next prerequisite step for students.</p>
+          <button
+            onClick={() => {
+              const nextNode = state.graphNodes.find(node => node.status === "active");
+              if (nextNode) completeNode(nextNode.id);
+            }}
+            className="mt-3 w-full py-2 rounded-lg text-xs font-bold transition-all hover:opacity-90"
+            style={{ background: cfg.color, color: '#fff' }}
+          >
+            Mark Next Graph Step Complete
+          </button>
         </div>
 
         {/* Stats row */}

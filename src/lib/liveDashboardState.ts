@@ -33,6 +33,8 @@ export interface LiveDashboardState {
   graphEdges: LiveGraphEdge[];
   queue: QueueEntry[];
   facultyAvailability: "accepting" | "in-class" | "away";
+  completedNodeIds: string[];
+  requestDecisions: Record<string, "pending" | "approved" | "held">;
   updatedAt: number;
 }
 
@@ -67,13 +69,15 @@ export const DEFAULT_LIVE_STATE: LiveDashboardState = {
   graphEdges: INITIAL_GRAPH_EDGES,
   queue: INITIAL_QUEUE,
   facultyAvailability: "accepting",
+  completedNodeIds: INITIAL_GRAPH_NODES.filter(node => node.status === "completed").map(node => node.id),
+  requestDecisions: {},
   updatedAt: Date.now(),
 };
 
 const isBrowser = typeof window !== "undefined";
 
 function normalizeLiveState(rawState: Partial<LiveDashboardState>): LiveDashboardState {
-  const graphNodes = (rawState.graphNodes ?? INITIAL_GRAPH_NODES).map(node => ({
+  const rawNodes = (rawState.graphNodes ?? INITIAL_GRAPH_NODES).map(node => ({
     ...node,
     id: node.id === "osas" ? "sas" : node.id,
     label: node.label === "OSAS" ? "SAS" : node.label,
@@ -85,11 +89,24 @@ function normalizeLiveState(rawState: Partial<LiveDashboardState>): LiveDashboar
     to: edge.to === "osas" ? "sas" : edge.to,
   }));
 
+  const completedNodeIds = rawState.completedNodeIds ?? rawNodes.filter(node => node.status === "completed").map(node => node.id);
+  const completed = new Set(completedNodeIds);
+  const graphNodes = rawNodes.map(node => ({
+    ...node,
+    status: completed.has(node.id)
+      ? "completed" as const
+      : (node.prerequisites ?? []).every(prerequisite => completed.has(prerequisite))
+      ? "active" as const
+      : "locked" as const,
+  }));
+
   return {
     graphNodes,
     graphEdges,
     queue: rawState.queue ?? INITIAL_QUEUE,
     facultyAvailability: rawState.facultyAvailability ?? "accepting",
+    completedNodeIds,
+    requestDecisions: rawState.requestDecisions ?? {},
     updatedAt: rawState.updatedAt ?? Date.now(),
   };
 }
@@ -165,7 +182,13 @@ export function useLiveDashboardState() {
 
   const setGraph = useCallback((nodes: LiveGraphNode[], edges: LiveGraphEdge[]) => {
     setState(prev => {
-      const next = { ...prev, graphNodes: nodes, graphEdges: edges, updatedAt: Date.now() };
+      const next = normalizeLiveState({
+        ...prev,
+        graphNodes: nodes,
+        graphEdges: edges,
+        completedNodeIds: prev.completedNodeIds.filter(id => nodes.some(node => node.id === id)),
+        updatedAt: Date.now(),
+      });
       persistState(next);
       emitSync(next);
       return next;
@@ -190,11 +213,38 @@ export function useLiveDashboardState() {
     });
   }, []);
 
+  const completeNode = useCallback((nodeId: string) => {
+    setState(prev => {
+      const completedNodeIds = prev.completedNodeIds.includes(nodeId)
+        ? prev.completedNodeIds
+        : [...prev.completedNodeIds, nodeId];
+      const next = normalizeLiveState({ ...prev, completedNodeIds, updatedAt: Date.now() });
+      persistState(next);
+      emitSync(next);
+      return next;
+    });
+  }, []);
+
+  const setRequestDecision = useCallback((requestId: string, decision: "pending" | "approved" | "held") => {
+    setState(prev => {
+      const next = normalizeLiveState({
+        ...prev,
+        requestDecisions: { ...prev.requestDecisions, [requestId]: decision },
+        updatedAt: Date.now(),
+      });
+      persistState(next);
+      emitSync(next);
+      return next;
+    });
+  }, []);
+
   return {
     state,
     replaceState,
     setGraph,
     setQueue,
     setAvailability,
+    completeNode,
+    setRequestDecision,
   };
 }

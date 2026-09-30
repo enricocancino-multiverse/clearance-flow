@@ -7,11 +7,11 @@ export type AvailabilityStatus = 'accepting' | 'in-class' | 'away';
 export type ThemePreference = 'light' | 'dark';
 
 export const DEPT_CONFIG: Record<DeptKey, { label: string; color: string; light: string; abbr: string }> = {
-  cs:      { label: 'Computer Science',       color: '#3B82F6', light: '#DBEAFE', abbr: 'CS'   },
+  cs:      { label: 'Computer Science',       color: '#38BDF8', light: '#BAE6FD', abbr: 'CS'   },
   hm:      { label: 'Hospitality Management', color: '#F97316', light: '#FFEDD5', abbr: 'HM'   },
   crim:    { label: 'Criminology',             color: '#EF4444', light: '#FEE2E2', abbr: 'CRIM' },
   basiced: { label: 'Basic Education',         color: '#10B981', light: '#D1FAE5', abbr: 'BSED' },
-  tesda:   { label: 'TESDA / Vocational',      color: '#8B5CF6', light: '#EDE9FE', abbr: 'TVOC' },
+  tesda:   { label: 'TESDA / Vocational',      color: '#1E3A8A', light: '#DBEAFE', abbr: 'TVOC' },
 };
 
 // ─── Dual-ID System: PostgreSQL Table Shapes ───────────────────────────────────

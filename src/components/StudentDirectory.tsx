@@ -8,6 +8,7 @@ interface Props {
   onBack: () => void;
   onViewProfile: (profile: ProfileData) => void;
   currentUserId: string;
+  embedded?: boolean;
 }
 
 const DIRECTORY: ProfileData[] = [
@@ -179,7 +180,7 @@ const DIRECTORY: ProfileData[] = [
 
 type FilterDept = 'all' | DeptKey | 'faculty';
 
-export default function StudentDirectory({ onBack, onViewProfile, currentUserId }: Props) {
+export default function StudentDirectory({ onBack, onViewProfile, currentUserId, embedded = false }: Props) {
   const { isDark, toggle } = useTheme();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<FilterDept>('all');
@@ -211,7 +212,7 @@ export default function StudentDirectory({ onBack, onViewProfile, currentUserId 
 
   const filters: { key: FilterDept; label: string; color?: string }[] = [
     { key: 'all', label: 'All' },
-    { key: 'faculty', label: 'Faculty', color: '#8B5CF6' },
+    { key: 'faculty', label: 'Faculty', color: '#7C3AED' },
     ...Object.entries(DEPT_CONFIG).map(([k, v]) => ({
       key: k as DeptKey,
       label: v.abbr,
@@ -221,11 +222,11 @@ export default function StudentDirectory({ onBack, onViewProfile, currentUserId 
 
   return (
     <div
-      className={`min-h-screen ${bg} transition-colors duration-300`}
+      className={`${embedded ? '' : 'min-h-screen'} ${bg} transition-colors duration-300`}
       style={{ fontFamily: 'Outfit, sans-serif' }}
     >
       {/* Nav */}
-      <header className={`sticky top-0 z-20 border-b backdrop-blur-md ${nav}`}>
+      {!embedded && <header className={`sticky top-0 z-20 border-b backdrop-blur-md ${nav}`}>
         <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
           <button
             onClick={onBack}
@@ -248,9 +249,9 @@ export default function StudentDirectory({ onBack, onViewProfile, currentUserId 
             {isDark ? '☀️' : '🌙'}
           </button>
         </div>
-      </header>
+      </header>}
 
-      <div className="max-w-5xl mx-auto px-4 py-6">
+      <div className={`${embedded ? '' : 'max-w-5xl mx-auto'} px-4 py-6`}>
         {/* Search */}
         <div className="relative mb-4">
           <svg
@@ -284,7 +285,7 @@ export default function StudentDirectory({ onBack, onViewProfile, currentUserId 
               style={
                 filter === f.key
                   ? {
-                      background: f.color ?? '#3B82F6',
+                      background: f.color ?? '#64748b',
                       color: '#fff',
                       borderColor: 'transparent',
                     }
@@ -303,7 +304,7 @@ export default function StudentDirectory({ onBack, onViewProfile, currentUserId 
         {/* Grid */}
         {filtered.length === 0 ? (
           <div className={`text-center py-16 ${muted}`} style={{ fontFamily: 'Inter, sans-serif' }}>
-            No students found for "{search}"
+            No students found for &quot;{search}&quot;
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

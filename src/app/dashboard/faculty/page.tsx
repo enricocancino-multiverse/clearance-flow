@@ -71,6 +71,11 @@ export default function FacultyDashboard() {
       facultyName={faculty.position || account.email.split("@")[0]}
       onBack={handleBack}
       onViewProfile={() => setView("profile")}
+      onFreespace={() => router.push("/freespace")}
+      onSignOut={() => {
+        logout();
+        router.replace("/");
+      }}
     />
   );
 }
