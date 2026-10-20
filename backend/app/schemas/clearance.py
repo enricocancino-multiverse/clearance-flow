@@ -4,6 +4,7 @@ Clearance DAG schemas: nodes, edges, requests, schedule, graph state, metrics.
 
 from datetime import datetime
 from typing import Optional
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -31,7 +32,7 @@ class ClearanceNodeUpdate(BaseModel):
 
 class ClearanceNodeResponse(ClearanceNodeBase):
     """Clearance node response schema."""
-    id: str
+    id: UUID
     created_at: datetime
 
     class Config:
@@ -40,8 +41,8 @@ class ClearanceNodeResponse(ClearanceNodeBase):
 
 class ClearanceEdgeBase(BaseModel):
     """Base clearance edge schema."""
-    from_node_id: str
-    to_node_id: str
+    from_node_id: UUID
+    to_node_id: UUID
 
 
 class ClearanceEdgeCreate(ClearanceEdgeBase):
@@ -51,7 +52,7 @@ class ClearanceEdgeCreate(ClearanceEdgeBase):
 
 class ClearanceEdgeResponse(ClearanceEdgeBase):
     """Clearance edge response schema."""
-    id: str
+    id: UUID
     created_at: datetime
 
     class Config:
@@ -69,8 +70,8 @@ class GraphStateResponse(BaseModel):
 
 class ClearanceRequestBase(BaseModel):
     """Base clearance request schema."""
-    student_account_id: str
-    node_id: str
+    student_account_id: UUID
+    node_id: UUID
 
 
 class ClearanceRequestCreate(ClearanceRequestBase):
@@ -87,8 +88,8 @@ class ClearanceRequestUpdate(BaseModel):
 
 class ClearanceRequestResponse(ClearanceRequestBase):
     """Clearance request response schema."""
-    id: str
-    faculty_account_id: Optional[str] = None
+    id: UUID
+    faculty_account_id: Optional[UUID] = None
     status: str
     hold_reason: Optional[str] = None
     submitted_at: datetime
@@ -139,8 +140,8 @@ class ScheduleSlotUpdate(BaseModel):
 
 class ScheduleSlotResponse(ScheduleSlotBase):
     """Schedule slot response schema."""
-    id: str
-    faculty_account_id: Optional[str] = None
+    id: UUID
+    faculty_account_id: Optional[UUID] = None
     created_at: datetime
     updated_at: datetime
 

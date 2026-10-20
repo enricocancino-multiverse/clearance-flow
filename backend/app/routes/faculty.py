@@ -13,10 +13,14 @@ from sqlalchemy.orm import selectinload
 
 from app.core.database import get_session
 from app.models.account import Faculty, Student, UserRole, AvailabilityStatus
-from app.models.clearance import ClearanceRequest, ClearanceNode, ClearanceEdge
+from app.models.clearance import ClearanceRequest, ClearanceNode, ClearanceEdge, ScheduleSlot
 from app.routes.auth import get_current_account
 from app.schemas.faculty import FacultyQueueItemResponse, FacultyResponse
-from app.schemas.clearance import ClearanceRequestResponse
+from app.schemas.clearance import (
+    ClearanceRequestResponse,
+    ScheduleSlotCreate,
+    ScheduleSlotResponse,
+)
 from app.schemas.student import StudentResponse
 
 router = APIRouter(prefix="/faculty", tags=["Faculty"])
@@ -155,3 +159,42 @@ async def set_availability(
     await session.refresh(faculty)
 
     return FacultyResponse.model_validate(faculty)
+
+
+@router.post(
+    "/{faculty_id}/office-hours",
+    response_model=ScheduleSlotResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_office_hours(
+    faculty_id: str,
+    payload: ScheduleSlotCreate,
+    session: AsyncSession = Depends(get_session),
+    current_account=Depends(get_current_account),
+    _: None = Depends(require_faculty_role),
+) -> ScheduleSlotResponse:
+    """Add an office-hour slot for the signed-in faculty member."""
+    faculty_result = await session.execute(
+        select(Faculty).where(Faculty.account_id == current_account.id)
+    )
+    faculty = faculty_result.scalar_one_or_none()
+    if not faculty:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Faculty profile not found",
+        )
+
+    if faculty_id.lower() not in (str(faculty.account_id).lower(), faculty.school_id.lower()):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Faculty can only manage their own office hours",
+        )
+
+    slot = ScheduleSlot(
+        **payload.model_dump(exclude={"faculty_account_id"}),
+        faculty_account_id=faculty.account_id,
+    )
+    session.add(slot)
+    await session.commit()
+    await session.refresh(slot)
+    return ScheduleSlotResponse.model_validate(slot)

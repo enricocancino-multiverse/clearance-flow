@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
 from app.models.account import Faculty, UserRole
-from app.models.clearance import ClearanceRequest
+from app.models.clearance import ClearanceEdge, ClearanceRequest
 from app.routes.auth import get_current_account
 from app.schemas.clearance import ApproveRequest, ClearanceRequestResponse, HoldRequest
 
@@ -37,7 +37,7 @@ async def approve_request(
     _: None = Depends(require_faculty_or_admin),
 ) -> ClearanceRequestResponse:
     """
-    Approve a clearance request.
+    Approve a pending request or complete a held request after its meeting.
     Only the assigned faculty or superadmin can approve.
     """
     # Get the request
@@ -52,11 +52,32 @@ async def approve_request(
             detail="Request not found",
         )
 
-    if request.status != "pending":
+    if request.status not in ("pending", "held"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Cannot approve request with status: {request.status}",
         )
+
+    prerequisite_result = await session.execute(
+        select(ClearanceEdge.from_node_id).where(
+            ClearanceEdge.to_node_id == request.node_id
+        )
+    )
+    prerequisite_ids = [row[0] for row in prerequisite_result.all()]
+    if prerequisite_ids:
+        approved_result = await session.execute(
+            select(ClearanceRequest.node_id).where(
+                ClearanceRequest.student_account_id == request.student_account_id,
+                ClearanceRequest.node_id.in_(prerequisite_ids),
+                ClearanceRequest.status == "approved",
+            )
+        )
+        approved_ids = {row[0] for row in approved_result.all()}
+        if len(approved_ids) != len(set(prerequisite_ids)):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Prerequisite clearances are not approved",
+            )
 
     # Verify faculty authorization
     if current_account.role != UserRole.SUPERADMIN:
@@ -74,6 +95,7 @@ async def approve_request(
     # Approve the request
     request.status = "approved"
     request.faculty_account_id = payload.faculty_account_id
+    request.hold_reason = None
     request.approved_at = datetime.now()
     await session.commit()
     await session.refresh(request)

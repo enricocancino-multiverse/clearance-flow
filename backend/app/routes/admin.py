@@ -136,12 +136,28 @@ async def create_rule(
             detail="Target node not found",
         )
 
-    # Check for cycles (simplified - in production use proper cycle detection)
-    if payload.from_node_id == payload.to_node_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot create self-referencing rule",
+    edges_result = await session.execute(select(ClearanceEdge))
+    adjacency: dict[str, list[str]] = {}
+    for existing_edge in edges_result.scalars().all():
+        adjacency.setdefault(str(existing_edge.from_node_id), []).append(
+            str(existing_edge.to_node_id)
         )
+
+    source_id = str(payload.from_node_id)
+    target_id = str(payload.to_node_id)
+    pending_nodes = [target_id]
+    visited: set[str] = set()
+    while pending_nodes:
+        current_id = pending_nodes.pop()
+        if current_id == source_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Rule would create a cycle",
+            )
+        if current_id in visited:
+            continue
+        visited.add(current_id)
+        pending_nodes.extend(adjacency.get(current_id, []))
 
     edge = ClearanceEdge(**payload.model_dump())
     session.add(edge)
