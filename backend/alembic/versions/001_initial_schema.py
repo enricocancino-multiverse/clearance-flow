@@ -174,7 +174,7 @@ def upgrade() -> None:
         sa.Column("edge_count", sa.Integer(), nullable=False),
         sa.Column("heap_usage_mb", sa.Float(), nullable=False),
         sa.Column("simulated_user_count", sa.Integer(), nullable=False),
-        sa.Column("complexity", sa.String(50), nullable=False, server_default="O(V+E)"),
+        sa.Column("complexity", sa.String(50), nullable=False, server_default="O((V+E) log V)"),
         sa.Column("recorded_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     )
     op.create_index("ix_algorithm_metrics_recorded_at", "algorithm_metrics", ["recorded_at"])

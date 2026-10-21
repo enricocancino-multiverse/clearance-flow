@@ -11,7 +11,7 @@ export const DEPT_CONFIG: Record<DeptKey, { label: string; color: string; light:
   hm:      { label: 'Hospitality Management', color: '#F97316', light: '#FFEDD5', abbr: 'HM'   },
   crim:    { label: 'Criminology',             color: '#EF4444', light: '#FEE2E2', abbr: 'CRIM' },
   basiced: { label: 'Basic Education',         color: '#10B981', light: '#D1FAE5', abbr: 'BSED' },
-  tesda:   { label: 'TESDA / Vocational',      color: '#1E3A8A', light: '#DBEAFE', abbr: 'TVOC' },
+  tesda:   { label: 'HMT',                     color: '#1E3A8A', light: '#DBEAFE', abbr: 'HMT'  },
 };
 
 // ─── Dual-ID System: PostgreSQL Table Shapes ───────────────────────────────────
@@ -23,6 +23,7 @@ export interface Account {
   account_id: string;              // UUID v4 PRIMARY KEY
   email: string;                   // unique, not null
   role: UserRole;
+  department?: DeptKey | null;
   theme_preference: ThemePreference;
   avatar_url: string | null;       // optional profile image
   bio: string | null;              // optional short description
@@ -104,7 +105,7 @@ export interface AlgorithmMetrics {
   edge_count: number;
   heap_usage_mb: number;
   simulated_user_count: number;
-  complexity: string;              // "O(V+E)"
+  complexity: string;              // "O((V+E) log V)" with heap-based greedy tie-breaking
   recorded_at: string;             // ISO 8601
 }
 

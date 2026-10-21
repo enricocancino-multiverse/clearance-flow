@@ -3,6 +3,7 @@ Admin routes: graph management, metrics, users.
 """
 
 from typing import Optional
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select, delete
@@ -17,8 +18,11 @@ from app.models.clearance import (
     ClearanceNode,
     ClearanceRequest,
 )
+from app.services.kahn_service import KahnService, KahnAlgorithmError
 from app.routes.auth import get_current_account
 from app.schemas.clearance import (
+    AlgorithmRunRequest,
+    AlgorithmRunResponse,
     AlgorithmMetricsResponse,
     ClearanceEdgeCreate,
     ClearanceEdgeResponse,
@@ -204,6 +208,50 @@ async def get_metrics(
     return [AlgorithmMetricsResponse.model_validate(m) for m in metrics]
 
 
+@router.post("/algorithm/run", response_model=AlgorithmRunResponse)
+async def run_graph_algorithm(
+    payload: AlgorithmRunRequest,
+    session: AsyncSession = Depends(get_session),
+    _: None = Depends(require_superadmin),
+) -> AlgorithmRunResponse:
+    """Run Kahn's topological sort on the current clearance graph and record metrics."""
+    nodes_result = await session.execute(
+        select(ClearanceNode).order_by(ClearanceNode.position_y, ClearanceNode.position_x)
+    )
+    nodes = list(nodes_result.scalars().all())
+    edges_result = await session.execute(select(ClearanceEdge))
+    edges = list(edges_result.scalars().all())
+
+    try:
+        with KahnService() as algorithm:
+            algorithm.create_handle(nodes, edges)
+            sorted_ids, has_cycle, metrics = algorithm.execute(payload.simulated_user_count)
+    except (KahnAlgorithmError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+    session.add(
+        AlgorithmMetrics(
+            id=UUID(metrics.id),
+            execution_time_ms=metrics.execution_time_ms,
+            vertex_count=metrics.vertex_count,
+            edge_count=metrics.edge_count,
+            heap_usage_mb=metrics.heap_usage_mb,
+            simulated_user_count=metrics.simulated_user_count,
+            complexity=metrics.complexity,
+            recorded_at=metrics.recorded_at,
+        )
+    )
+    await session.commit()
+    return AlgorithmRunResponse(
+        sorted_node_ids=sorted_ids,
+        has_cycle=has_cycle,
+        metrics=metrics,
+    )
+
+
 # ─── Users ────────────────────────────────────────────────────────────
 
 @router.get("/users", response_model=list[AccountResponse])
@@ -213,11 +261,56 @@ async def get_users(
     _: None = Depends(require_superadmin),
 ) -> list[AccountResponse]:
     """Get all system users, optionally filtered by role."""
-    query = select(Account).order_by(Account.created_at.desc())
+    query = (
+        select(Account)
+        .options(selectinload(Account.student), selectinload(Account.faculty))
+        .order_by(Account.created_at.desc())
+    )
 
     if role:
         query = query.where(Account.role == role)
 
     result = await session.execute(query)
     accounts = result.scalars().all()
-    return [AccountResponse.model_validate(a) for a in accounts]
+    return [
+        AccountResponse.model_validate(account).model_copy(
+            update={
+                "department": (
+                    account.student.department
+                    if account.student
+                    else account.faculty.department
+                    if account.faculty
+                    else None
+                )
+            }
+        )
+        for account in accounts
+    ]
+
+
+@router.delete("/users/{account_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_user(
+    account_id: UUID,
+    session: AsyncSession = Depends(get_session),
+    current_account: Account = Depends(get_current_account),
+    _: None = Depends(require_superadmin),
+) -> None:
+    """Delete a student or faculty account without allowing an admin to remove themself."""
+    account = await session.get(Account, account_id)
+    if not account:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Account not found",
+        )
+    if account.id == current_account.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You cannot delete your own administrator account",
+        )
+    if account.role == UserRole.SUPERADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Use an existing administrator account to manage administrator access",
+        )
+    await session.delete(account)
+    await session.commit()

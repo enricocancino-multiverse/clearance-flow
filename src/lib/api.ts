@@ -24,8 +24,38 @@ import type {
   AlgorithmMetrics,
   Account,
   ApiError,
+  DeptKey,
+  UserRole,
 } from "@/types";
-import { mockLogin, mockMe, mockLogout } from "@/lib/mockAuth";
+import {
+  mockLogin,
+  mockMe,
+  mockLogout,
+  mockUpdateAccount,
+  mockChangePassword,
+  mockListAccounts,
+  mockCreateAccount,
+  mockDeleteAccount,
+} from "@/lib/mockAuth";
+
+export interface CreateAccountPayload {
+  email: string;
+  password: string;
+  role: Extract<UserRole, "student" | "faculty">;
+  school_id: string;
+  department: DeptKey;
+  year_level?: number;
+  section?: string;
+}
+
+export interface CreatedAccount {
+  account_id: string;
+  email: string;
+  role: string;
+  school_id: string;
+  temporary_password: string;
+  must_change_password: boolean;
+}
 
 // ─── Base Fetch Helper ────────────────────────────────────────────────────────
 
@@ -33,6 +63,10 @@ const BASE =
   (typeof process !== "undefined" ? process.env.NEXT_PUBLIC_API_URL : undefined) ??
   (typeof window !== "undefined" ? (window as any).__NEXT_PUBLIC_API_URL__ : undefined) ??
   "http://localhost:8000/api/v1";
+const allowMockFallback =
+  typeof process !== "undefined" &&
+  process.env.NODE_ENV !== "production" &&
+  !process.env.NEXT_PUBLIC_API_URL;
 
 class ApiRequestError extends Error implements ApiError {
   status: number;
@@ -79,7 +113,7 @@ const fallbackToMock = async <T>(
       message.toLowerCase().includes("network") ||
       message.toLowerCase().includes("load failed");
 
-    if (isNetworkFailure) {
+    if (isNetworkFailure && allowMockFallback) {
       return await mockCall();
     }
 
@@ -115,6 +149,30 @@ export const authApi = {
         body: JSON.stringify({ token, new_password: newPassword }),
       }),
       () => import("@/lib/mockAuth").then(({ mockResetPassword }) => mockResetPassword(token, newPassword)),
+    ),
+
+  updateAccount: (
+    accountId: string,
+    updates: Partial<Pick<Account, "theme_preference" | "avatar_url" | "bio">>,
+  ) =>
+    fallbackToMock(
+      () => request<Account>("/auth/me", { method: "PATCH", body: JSON.stringify(updates) }),
+      () => mockUpdateAccount(accountId, updates),
+    ),
+
+  changePassword: (accountId: string, currentPassword: string, newPassword: string) =>
+    fallbackToMock(
+      () => request<{ message: string }>("/auth/change-password", {
+        method: "POST",
+        body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+      }),
+      () => mockChangePassword(accountId, currentPassword, newPassword),
+    ),
+
+  createAccount: (payload: CreateAccountPayload) =>
+    fallbackToMock(
+      () => request<CreatedAccount>("/auth/create-account", { method: "POST", body: JSON.stringify(payload) }),
+      () => mockCreateAccount(payload),
     ),
 
   logout: () =>
@@ -204,7 +262,17 @@ export const adminApi = {
 
   getMetrics: () => request<AlgorithmMetrics[]>("/admin/metrics"),
 
-  getUsers: () => request<Account[]>("/admin/users"),
+  getUsers: () =>
+    fallbackToMock(
+      () => request<Account[]>("/admin/users"),
+      () => mockListAccounts(),
+    ),
+
+  deleteUser: (accountId: string) =>
+    fallbackToMock(
+      () => request<void>(`/admin/users/${accountId}`, { method: "DELETE" }),
+      () => mockDeleteAccount(accountId),
+    ),
 };
 
 export { ApiRequestError };

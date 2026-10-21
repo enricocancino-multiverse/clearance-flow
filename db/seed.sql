@@ -1,30 +1,42 @@
 -- ClearanceFlow Database Seed Data
 -- Run AFTER schema.sql
 -- Passwords are bcrypt hashed with cost 12 (all passwords = "password123")
+-- Demo credentials mirror src/lib/demoAccounts.ts.
 
 -- ─── Demo Accounts ────────────────────────────────────────────────────────────
 -- Password hash for "password123" (bcrypt cost 12)
 -- Generated: bcrypt.hashSync('password123', 12)
 
 INSERT INTO accounts (account_id, email, role, theme_preference, avatar_url, bio, password_hash, created_at, updated_at) VALUES
--- Student: student@clearanceflow.edu | School ID: 2026-STU-001
-('11111111-1111-1111-1111-111111111111', 'student@clearanceflow.edu', 'student', 'dark', NULL, 'Coffee-fueled coder and aspiring software engineer. Loves UI/UX design and building things that matter.', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj/RK.PZvO.S', NOW(), NOW()),
-
--- Faculty: faculty@clearanceflow.edu | School ID: FAC-2026-088
-('22222222-2222-2222-2222-222222222222', 'faculty@clearanceflow.edu', 'faculty', 'dark', NULL, 'Ph.D. in Computer Science. Research areas: algorithm design and educational technology. Adviser, JPCS Chapter.', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj/RK.PZvO.S', NOW(), NOW()),
-
--- SuperAdmin: admin@clearanceflow.edu | School ID: ADM-2026-001
+('11111111-1111-1111-1111-111111111111', 'student@clearanceflow.edu', 'student', 'dark', NULL, 'Computer Science student exploring software development.', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj/RK.PZvO.S', NOW(), NOW()),
+('44444444-4444-4444-4444-444444444444', 'student.hm@clearanceflow.edu', 'student', 'dark', NULL, 'Hospitality Management student.', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj/RK.PZvO.S', NOW(), NOW()),
+('55555555-5555-5555-5555-555555555555', 'student.crim@clearanceflow.edu', 'student', 'dark', NULL, 'Criminology student.', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj/RK.PZvO.S', NOW(), NOW()),
+('66666666-6666-6666-6666-666666666666', 'student.bsed@clearanceflow.edu', 'student', 'dark', NULL, 'Basic Education student.', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj/RK.PZvO.S', NOW(), NOW()),
+('77777777-7777-7777-7777-777777777777', 'student.hmt@clearanceflow.edu', 'student', 'dark', NULL, 'HMT student.', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj/RK.PZvO.S', NOW(), NOW()),
+('22222222-2222-2222-2222-222222222222', 'faculty@clearanceflow.edu', 'faculty', 'dark', NULL, 'Computer Science faculty member.', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj/RK.PZvO.S', NOW(), NOW()),
+('88888888-8888-8888-8888-888888888888', 'faculty.hm@clearanceflow.edu', 'faculty', 'dark', NULL, 'Hospitality Management faculty member.', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj/RK.PZvO.S', NOW(), NOW()),
+('99999999-9999-9999-9999-999999999999', 'faculty.crim@clearanceflow.edu', 'faculty', 'dark', NULL, 'Criminology faculty member.', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj/RK.PZvO.S', NOW(), NOW()),
+('aaaaaaaa-aaaa-aaaa-aaaa-000000000001', 'faculty.bsed@clearanceflow.edu', 'faculty', 'dark', NULL, 'Basic Education faculty member.', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj/RK.PZvO.S', NOW(), NOW()),
+('bbbbbbbb-bbbb-bbbb-bbbb-000000000002', 'faculty.hmt@clearanceflow.edu', 'faculty', 'dark', NULL, 'HMT faculty member.', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj/RK.PZvO.S', NOW(), NOW()),
 ('33333333-3333-3333-3333-333333333333', 'admin@clearanceflow.edu', 'superadmin', 'dark', NULL, 'University-wide system administrator for ClearanceFlow.', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj/RK.PZvO.S', NOW(), NOW())
 ON CONFLICT (email) DO NOTHING;
 
 -- ─── Student Profiles ─────────────────────────────────────────────────────────
 INSERT INTO students (school_id, account_id, department, year_level, section, exam_date, created_at, updated_at) VALUES
-('2026-STU-001', '11111111-1111-1111-1111-111111111111', 'cs', 3, 'BSCS-3A', '2026-08-28 10:00:00+00', NOW(), NOW())
+('2026-STU-001', '11111111-1111-1111-1111-111111111111', 'cs', 3, 'BSCS-3A', '2026-08-28 10:00:00+00', NOW(), NOW()),
+('2026-STU-002', '44444444-4444-4444-4444-444444444444', 'hm', 2, 'BSHM-2A', NULL, NOW(), NOW()),
+('2026-STU-003', '55555555-5555-5555-5555-555555555555', 'crim', 2, 'BSCRIM-2A', NULL, NOW(), NOW()),
+('2026-STU-004', '66666666-6666-6666-6666-666666666666', 'basiced', 2, 'BSED-2A', NULL, NOW(), NOW()),
+('2026-STU-005', '77777777-7777-7777-7777-777777777777', 'tesda', 2, 'HMT-2A', NULL, NOW(), NOW())
 ON CONFLICT (school_id) DO NOTHING;
 
 -- ─── Faculty Profiles ─────────────────────────────────────────────────────────
 INSERT INTO faculty (school_id, account_id, department, is_superadmin, position, availability, created_at, updated_at) VALUES
 ('FAC-2026-088', '22222222-2222-2222-2222-222222222222', 'cs', FALSE, 'Department Chair, Computer Science', 'accepting', NOW(), NOW()),
+('FAC-2026-HM-002', '88888888-8888-8888-8888-888888888888', 'hm', FALSE, 'Department Faculty, Hospitality Management', 'accepting', NOW(), NOW()),
+('FAC-2026-CRIM-003', '99999999-9999-9999-9999-999999999999', 'crim', FALSE, 'Department Faculty, Criminology', 'accepting', NOW(), NOW()),
+('FAC-2026-BSED-004', 'aaaaaaaa-aaaa-aaaa-aaaa-000000000001', 'basiced', FALSE, 'Department Faculty, Basic Education', 'accepting', NOW(), NOW()),
+('FAC-2026-HMT-005', 'bbbbbbbb-bbbb-bbbb-bbbb-000000000002', 'tesda', FALSE, 'Department Faculty, HMT', 'accepting', NOW(), NOW()),
 ('ADM-2026-001', '33333333-3333-3333-3333-333333333333', 'cs', TRUE, 'System Administrator', 'accepting', NOW(), NOW())
 ON CONFLICT (school_id) DO NOTHING;
 

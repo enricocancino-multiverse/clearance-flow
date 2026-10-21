@@ -160,7 +160,7 @@ class AlgorithmMetrics(Base, UUIDPrimaryKeyMixin):
     edge_count: Mapped[int] = mapped_column(Integer, nullable=False)
     heap_usage_mb: Mapped[float] = mapped_column(nullable=False)
     simulated_user_count: Mapped[int] = mapped_column(Integer, nullable=False)
-    complexity: Mapped[str] = mapped_column(String(50), nullable=False, default="O(V+E)")
+    complexity: Mapped[str] = mapped_column(String(50), nullable=False, default="O((V+E) log V)")
     recorded_at: Mapped[datetime] = mapped_column(nullable=False, default=lambda: datetime.now(), index=True)
 
     def __repr__(self) -> str:

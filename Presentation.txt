@@ -1,0 +1,181 @@
+CLEARANCEFLOW — PRESENTATION SCRIPT
+Suggested length: 6–8 minutes
+
+BEFORE THE PRESENTATION
+
+1. Start the application and make sure the login page loads.
+2. If you are using the PostgreSQL backend, make sure its schema and seed data are installed. The demo seed scripts are:
+   - backend/init-db/02-seed-data.sql
+   - db/seed.sql
+3. Keep this demo password ready: password123
+4. Recommended demo order: one student, one teacher, then the admin.
+
+
+1. INTRODUCTION
+
+PRESENTER:
+
+"Good day. We are presenting ClearanceFlow, a role-based academic clearance system.
+
+The purpose of the system is to make clearance progress easier to understand and manage. Instead of treating every office as an unrelated step, ClearanceFlow represents requirements and their prerequisites as a directed graph. Students can see their progress, teachers can process student requirements, and administrators can manage the clearance graph.
+
+Our project combines a Next.js and React frontend, a FastAPI backend, and a PostgreSQL database. We also use Kahn's algorithm to order requirements and detect cycles in the prerequisite graph."
+
+
+2. SHOW THE SIGN-IN PAGE
+
+PRESENTER:
+
+"The sign-in form accepts either an institutional ID or an email address. As a user types, the form detects the likely account role and displays a badge. For known demo accounts, it also selects the user's department.
+
+Role detection helps the interface give immediate feedback, but it is not the security check. The actual login request authenticates the credentials, and the dashboard route is chosen from the role returned by the authenticated session."
+
+DEMO ACTION:
+
+"I will open the demo accounts list and choose a student account."
+
+Use one of these demo accounts:
+
+STUDENTS
+  CS:   2026-STU-001  | student@clearanceflow.edu
+  HM:   2026-STU-002  | student.hm@clearanceflow.edu
+  CRIM: 2026-STU-003  | student.crim@clearanceflow.edu
+  BSED: 2026-STU-004  | student.bsed@clearanceflow.edu
+  HMT:  2026-STU-005  | student.hmt@clearanceflow.edu
+
+TEACHERS
+  CS:   FAC-2026-088       | faculty@clearanceflow.edu
+  HM:   FAC-2026-HM-002    | faculty.hm@clearanceflow.edu
+  CRIM: FAC-2026-CRIM-003 | faculty.crim@clearanceflow.edu
+  BSED: FAC-2026-BSED-004 | faculty.bsed@clearanceflow.edu
+  HMT:  FAC-2026-HMT-005  | faculty.hmt@clearanceflow.edu
+
+ADMIN
+  Global Admin: ADM-2026-001 | admin@clearanceflow.edu
+
+All accounts use: password123
+
+
+3. STUDENT DASHBOARD
+
+PRESENTER:
+
+"The student dashboard presents the clearance requirements as a dependency graph. Each node represents a requirement or office, and each arrow represents a prerequisite.
+
+The status panel gives a readable list of the same requirements. A student can request sign-off for an eligible requirement. Requirements whose prerequisites are incomplete remain locked. When all requirements are cleared, the dashboard displays a completion notice."
+
+DEMO ACTION:
+
+1. Point out the graph nodes, arrows, progress indicator, and status list.
+2. Point out an active requirement and a locked requirement.
+3. If appropriate, demonstrate requesting sign-off.
+4. Mention that the demo has office-hours information as well.
+
+
+4. TEACHER DASHBOARD
+
+PRESENTER:
+
+"The teacher dashboard includes student clearance processing as well as the office schedule planner. Teachers can search students in their department and review the status of each requirement.
+
+For an unlocked requirement, a teacher can mark that the student needs to visit the office, clear the requirement online, or reset the requirement. Prerequisites determine which steps are available. Resetting a requirement also resets dependent requirements so the graph does not show later steps as complete when an earlier prerequisite has been undone."
+
+DEMO ACTION:
+
+1. Sign out, then sign in as the teacher from the same department as the student.
+2. Open Student Clearances and find the student.
+3. Show the locked/unlocked status and the available processing controls.
+4. If doing a live status change, choose a nonessential demo record and show the resulting student-facing status.
+5. Point out the schedule planner and its add/delete controls.
+
+PRESENTER NOTE:
+
+"The current clearance processing demonstration uses the application's shared browser-local dashboard state. For this demo, use the same browser so the teacher and student views can share that state. It is not yet a cross-device, database-persisted workflow."
+
+
+5. ADMIN DASHBOARD
+
+PRESENTER:
+
+"The administrator dashboard provides system-level views, including the clearance graph tools and user management. Administrators can work with the requirements and prerequisite relationships that define the clearance workflow. The admin account is separate from the five department teacher accounts."
+
+DEMO ACTION:
+
+1. Sign in as admin@clearanceflow.edu.
+2. Show the graph-management area and briefly explain that nodes are requirements and edges are prerequisite rules.
+3. Point out the algorithm demonstration or metrics area, if included in the presentation.
+
+
+6. HOW THE ALGORITHM WORKS
+
+PRESENTER:
+
+"The graph is a directed acyclic graph, or DAG. An arrow from A to B means A must be completed before B becomes available.
+
+Kahn's algorithm starts by finding all nodes with no remaining prerequisites. It selects one of those nodes, adds it to the order, and removes its outgoing dependency edges. Whenever a dependent node has no prerequisites left, it becomes available. The algorithm continues until all nodes are ordered or until it detects that some nodes remain blocked by a cycle.
+
+This is useful because a cycle would make a valid clearance order impossible. The graph validation also checks for duplicate IDs, missing endpoints, self-dependencies, and duplicate edges."
+
+OPTIONAL GREEDY EXPLANATION:
+
+"Where request priority ordering is used, the greedy score considers urgency such as days until an exam, completed prerequisites, and how long the request has been waiting. It chooses the highest-ranked currently available request at each step. This scoring is separate from the prerequisite ordering: Kahn's algorithm handles dependency order, while the greedy score helps rank eligible requests."
+
+
+7. CODE WALKTHROUGH
+
+PRESENTER:
+
+"Here is a quick look at how the code is organized:
+
+- src/app/page.tsx contains the sign-in screen, role badge, department selector, demo account shortcuts, and role-based navigation after login.
+- src/lib/demoAccounts.ts defines the 11 demo identities and the shared credential-classification logic.
+- src/components/StudentDashboard.tsx renders the student clearance graph and status view.
+- src/components/FacultyDashboard.tsx renders teacher clearance processing and schedule management.
+- src/components/AdminDashboard.tsx contains the administrator interface.
+- src/lib/clearanceAlgorithms.ts contains the frontend Kahn sort and greedy-priority utilities.
+- backend/app/routes/auth.py handles backend authentication and credential lookup.
+- backend/app/services/kahn_service.py validates and executes the graph algorithm, using the C++ module when available and a Python fallback otherwise.
+- backend/app/models contains the SQLAlchemy data models, and backend/init-db/02-seed-data.sql seeds the PostgreSQL demo data.
+
+The frontend sends requests through the API client, and the backend checks credentials and returns an authenticated session. The page then uses that session's role to open the appropriate dashboard."
+
+
+8. CLOSE
+
+PRESENTER:
+
+"To summarize, ClearanceFlow organizes clearance requirements by their dependencies, gives each user a role-appropriate interface, and makes progress easier to follow. Kahn's algorithm provides a valid requirement order and detects cycles, while greedy scoring can prioritize eligible requests.
+
+The demo accounts let us present the student, teacher, and administrator flows. Thank you. We are ready for your questions."
+
+“The algorithm is both visible in the admin interface and implemented in the source code. In the demo, open Admin Dashboard → Algorithm Demo. In the frontend source, runKahnSort() is in clearanceAlgorithms.ts. It calculates prerequisites, processes requirements as they become eligible, and detects cycles. The backend implementation is in kahn_service.py, with a C++ implementation in kahn_algorithm.cpp. Request-priority scoring is separate; it’s in faculty.py.” 
+
+POSSIBLE QUESTIONS
+
+Q: Where is the algorithm in your project?
+A: "You can see it in two places: in the running application, open the Admin dashboard and choose the Algorithm Demo tab; in the source code, the frontend demonstration is implemented in src/lib/clearanceAlgorithms.ts and displayed by src/components/AlgorithmPlayground.tsx. The backend Kahn implementation is in backend/app/services/kahn_service.py, which calls the C++ implementation in backend/cpp_module/kahn_algorithm.cpp when that module is available, and otherwise uses its Python fallback. The request-priority greedy scoring is separate and is implemented in backend/app/routes/faculty.py."
+
+DEMONSTRATION TIP:
+
+If your teacher asks to see the actual algorithm, don't only describe it or show the clearance graph. Open Admin Dashboard → Algorithm Demo, then explain the source:
+
+1. Open src/lib/clearanceAlgorithms.ts and point to runKahnSort().
+2. Show how the function calculates each node's indegree (the number of prerequisites), starts with nodes whose indegree is zero, and adds newly eligible nodes as prerequisites are removed.
+3. Point out cycle detection: if some nodes still have indegree after the loop, the graph contains a cycle.
+4. If asked how the backend runs it, show KahnService in backend/app/services/kahn_service.py, then the C++ execute implementation in backend/cpp_module/kahn_algorithm.cpp. The service uses the C++ module if available and otherwise falls back to Python.
+5. Explain the distinction: Kahn's algorithm respects prerequisite order; the greedy request score ranks requests using urgency, prerequisite progress, waiting time, and department match. The faculty request scoring is in backend/app/routes/faculty.py.
+
+Q: Why use Kahn's algorithm?
+A: It produces a topological ordering of a directed graph and can identify when a cycle makes a valid ordering impossible.
+
+Q: What does an arrow in the graph mean?
+A: The source requirement must be cleared before the destination requirement can be processed.
+
+Q: What does the greedy priority score do?
+A: It ranks eligible requests using urgency, prerequisite progress, and waiting time. It does not replace the prerequisite graph.
+
+Q: Are the demo accounts production accounts?
+A: No. They all use a shared demo password for presentation and testing. Production accounts should use secure, individually managed credentials.
+
+Q: Does a teacher's clearance change persist across devices?
+A: The current teacher clearance demo uses browser-local shared state, so it is suitable for a same-browser demonstration. A database-backed workflow with cross-device synchronization is a future integration step.

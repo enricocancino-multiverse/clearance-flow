@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { authApi } from "@/lib/api";
-import type { AuthSession, LoginPayload, UserRole } from "@/types";
+import type { Account, AuthSession, LoginPayload, UserRole } from "@/types";
 
 // ─── Context Shape ────────────────────────────────────────────────────────────
 
@@ -19,6 +19,8 @@ interface AuthContextValue {
   role: UserRole | null;
   login: (payload: LoginPayload) => Promise<AuthSession>;
   logout: () => Promise<void>;
+  updateAccount: (updates: Partial<Pick<Account, "theme_preference" | "avatar_url" | "bio">>) => Promise<Account>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -71,6 +73,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const updateAccount = useCallback(async (
+    updates: Partial<Pick<Account, "theme_preference" | "avatar_url" | "bio">>,
+  ): Promise<Account> => {
+    if (!session) throw new Error("Sign in to update your account.");
+    const account = await authApi.updateAccount(session.account.account_id, updates);
+    setSession(current => current ? { ...current, account } : current);
+    return account;
+  }, [session]);
+
+  const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
+    if (!session) throw new Error("Sign in to change your password.");
+    await authApi.changePassword(session.account.account_id, currentPassword, newPassword);
+  }, [session]);
+
   return (
     <AuthContext.Provider
       value={{
@@ -79,6 +95,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         role: session?.account.role ?? null,
         login,
         logout,
+        updateAccount,
+        changePassword,
       }}
     >
       {children}

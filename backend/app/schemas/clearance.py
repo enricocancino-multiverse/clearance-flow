@@ -162,3 +162,17 @@ class AlgorithmMetricsResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class AlgorithmRunRequest(BaseModel):
+    """Options for running the clearance graph algorithm."""
+
+    simulated_user_count: int = Field(default=100, ge=0, le=1_000_000)
+
+
+class AlgorithmRunResponse(BaseModel):
+    """Topological order and execution metrics for one graph run."""
+
+    sorted_node_ids: list[str]
+    has_cycle: bool
+    metrics: AlgorithmMetricsResponse

@@ -14,6 +14,9 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <cstdlib>
+#include <cstring>
+#include <functional>
 #include <memory>
 #include <queue>
 #include <string>
@@ -137,7 +140,7 @@ public:
         result.metrics.edge_count = static_cast<int>(edges.size());
         result.metrics.heap_usage_mb = 0.5; // Estimated
         result.metrics.simulated_user_count = simulated_users;
-        result.metrics.complexity = "O(V+E)";
+        result.metrics.complexity = "O((V+E) log V)";
 
         return result;
     }
@@ -148,7 +151,12 @@ public:
 extern "C" {
 
 // Opaque handle for the algorithm instance
-struct KahnHandle;
+struct KahnHandle {
+    KahnAlgorithm* algorithm;
+    explicit KahnHandle(KahnAlgorithm* instance) : algorithm(instance) {}
+};
+
+void kahn_free_results(char** sorted_ids, int count);
 
 KahnHandle* kahn_create(
     const char** node_ids,
@@ -188,7 +196,7 @@ KahnHandle* kahn_create(
 
 void kahn_destroy(KahnHandle* handle) {
     if (handle) {
-        delete static_cast<KahnAlgorithm*>(handle);
+        delete handle->algorithm;
         delete handle;
     }
 }
@@ -197,7 +205,7 @@ int kahn_execute(KahnHandle* handle, int simulated_users, char*** out_sorted_ids
     if (!handle) return -1;
 
     try {
-        KahnAlgorithm* algo = static_cast<KahnAlgorithm*>(handle);
+        KahnAlgorithm* algo = handle->algorithm;
         TopologicalResult result = algo->execute(simulated_users);
 
         *out_count = static_cast<int>(result.sorted_node_ids.size());
@@ -205,8 +213,17 @@ int kahn_execute(KahnHandle* handle, int simulated_users, char*** out_sorted_ids
 
         // Allocate output array
         *out_sorted_ids = static_cast<char**>(malloc(*out_count * sizeof(char*)));
+        if (*out_count > 0 && !*out_sorted_ids) return -1;
         for (int i = 0; i < *out_count; ++i) {
-            (*out_sorted_ids)[i] = strdup(result.sorted_node_ids[i].c_str());
+            const size_t size = result.sorted_node_ids[i].size() + 1;
+            (*out_sorted_ids)[i] = static_cast<char*>(malloc(size));
+            if (!(*out_sorted_ids)[i]) {
+                kahn_free_results(*out_sorted_ids, i);
+                *out_sorted_ids = nullptr;
+                *out_count = 0;
+                return -1;
+            }
+            std::memcpy((*out_sorted_ids)[i], result.sorted_node_ids[i].c_str(), size);
         }
 
         return 0;

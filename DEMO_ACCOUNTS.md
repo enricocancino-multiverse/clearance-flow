@@ -6,56 +6,27 @@ Quick reference for development, testing, and demo presentations.
 
 ## Credentials Summary
 
-| Role | Email | School ID | Password |
-|------|-------|-----------|----------|
-| **Student** | `student@clearanceflow.edu` | `2026-STU-001` | `password123` |
-| **Faculty** | `faculty@clearanceflow.edu` | `FAC-2026-088` | `password123` |
-| **SuperAdmin** | `admin@clearanceflow.edu` | `ADM-2026-001` | `password123` |
+| Role | Department | Email | School ID | Password |
+|------|------------|-------|-----------|----------|
+| Student | CS | `student@clearanceflow.edu` | `2026-STU-001` | `password123` |
+| Student | HM | `student.hm@clearanceflow.edu` | `2026-STU-002` | `password123` |
+| Student | CRIM | `student.crim@clearanceflow.edu` | `2026-STU-003` | `password123` |
+| Student | BSED | `student.bsed@clearanceflow.edu` | `2026-STU-004` | `password123` |
+| Student | HMT | `student.hmt@clearanceflow.edu` | `2026-STU-005` | `password123` |
+| Teacher | CS | `faculty@clearanceflow.edu` | `FAC-2026-088` | `password123` |
+| Teacher | HM | `faculty.hm@clearanceflow.edu` | `FAC-2026-HM-002` | `password123` |
+| Teacher | CRIM | `faculty.crim@clearanceflow.edu` | `FAC-2026-CRIM-003` | `password123` |
+| Teacher | BSED | `faculty.bsed@clearanceflow.edu` | `FAC-2026-BSED-004` | `password123` |
+| Teacher | HMT | `faculty.hmt@clearanceflow.edu` | `FAC-2026-HMT-005` | `password123` |
+| Admin | Global | `admin@clearanceflow.edu` | `ADM-2026-001` | `password123` |
 
 > **Note**: All accounts use the same password (`password123`) for ease of testing. In production, enforce unique strong passwords.
 
 ---
 
-## Account Details
+The login form recognizes student IDs and student emails as **Student**, department faculty IDs and `@clearanceflow.edu` teacher emails as **Teacher**, and `admin@clearanceflow.edu` / `ADM-2026-001` as **Admin**. Known student and teacher credentials automatically select their department.
 
-### 🎓 Student — `student@clearanceflow.edu`
-- **Account ID**: `11111111-1111-1111-1111-111111111111`
-- **School ID**: `2026-STU-001`
-- **Department**: Computer Science (`cs`)
-- **Year Level**: 3
-- **Section**: `BSCS-3A`
-- **Exam Date**: `2026-08-28` (drives priority scoring)
-- **Theme**: Dark
-- **Bio**: *Coffee-fueled coder and aspiring software engineer. Loves UI/UX design and building things that matter.*
-
-**Landing Page Detection**: Enter `2026-STU-001` → auto-detected as **Student**
-
----
-
-### 👨‍🏫 Faculty — `faculty@clearanceflow.edu`
-- **Account ID**: `22222222-2222-2222-2222-222222222222`
-- **School ID**: `FAC-2026-088`
-- **Department**: Computer Science (`cs`)
-- **Position**: Department Chair, Computer Science
-- **Availability**: `accepting` (toggleable: accepting / in-class / away)
-- **Theme**: Dark
-- **Bio**: *Ph.D. in Computer Science. Research areas: algorithm design and educational technology. Adviser, JPCS Chapter.*
-
-**Landing Page Detection**: Enter `faculty@clearanceflow.edu` → auto-detected as **Faculty**
-
----
-
-### 🛡️ SuperAdmin — `admin@clearanceflow.edu`
-- **Account ID**: `33333333-3333-3333-3333-333333333333`
-- **School ID**: `ADM-2026-001`
-- **Department**: Computer Science (`cs`)
-- **Position**: System Administrator
-- **Is SuperAdmin**: `true`
-- **Availability**: `accepting`
-- **Theme**: Dark
-- **Bio**: *University-wide system administrator for ClearanceFlow.*
-
-**Landing Page Detection**: Enter `admin@clearanceflow.edu` or `superadmin` → auto-detected as **SuperAdmin**
+The PostgreSQL seeds are `backend/init-db/02-seed-data.sql` (used by the backend Docker initialization) and `db/seed.sql`. The frontend mock accounts are defined in `src/lib/demoAccounts.ts`; all three sources contain the same 11 account credentials.
 
 ---
 
@@ -171,7 +142,7 @@ Profiling data from C++ module (simulated):
 | HM | 198 | 27 | 13.6% | `#F97316` |
 | CRIM | 245 | 39 | 15.9% | `#EF4444` |
 | BSED | 176 | 22 | 12.5% | `#10B981` |
-| TVOC | 134 | 18 | 13.4% | `#8B5CF6` |
+| HMT | 134 | 18 | 13.4% | `#1E3A8A` |
 
 **University Total**: 1,065 students · 154 active clearances
 

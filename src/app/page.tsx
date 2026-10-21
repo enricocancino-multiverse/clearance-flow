@@ -6,43 +6,22 @@ import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
 import { authApi } from "@/lib/api";
-import { ViewType, DeptKey, DEPT_CONFIG } from "@/types";
+import { DeptKey, DEPT_CONFIG } from "@/types";
+import { classifyCredential, DEMO_ACCOUNTS, DEMO_PASSWORD } from "@/lib/demoAccounts";
 
-// ─── Credential Classification (matches backend logic) ────────────────────────
+const ROLE_COLORS = {
+  student: "#2563eb",
+  faculty: "#16a34a",
+  superadmin: "#7c3aed",
+} as const;
 
-function classify(credential: string): { view: ViewType; dept: DeptKey } {
-  const val = credential.trim().toLowerCase();
-
-  // Student ID pattern: YYYY-NNNNN or YYYY-STU-NNN
-  if (/^\d{4}-\d{3,6}$/.test(val) || /^\d{4}-stu-\d{3}$/i.test(val)) {
-    const last = parseInt(val.slice(-2), 10);
-    const depts: DeptKey[] = ["cs", "hm", "crim", "basiced", "tesda"];
-    return { view: "student", dept: depts[last % depts.length] };
-  }
-
-  // SuperAdmin detection
-  if (val.includes("admin") || val === "superadmin") {
-    return { view: "superadmin", dept: "cs" };
-  }
-
-  // Faculty — email pattern
-  const deptMap: Record<string, DeptKey> = {
-    cs: "cs",
-    hm: "hm",
-    crim: "crim",
-    bsed: "basiced",
-    tvoc: "tesda",
-  };
-  const prefix = val.split("@")[0].split(".").pop() ?? "";
-  const dept = deptMap[prefix] ?? "cs";
-  return { view: "faculty", dept };
-}
-
-const HINTS = [
-  { label: "Student", credential: "2026-STU-001", color: DEPT_CONFIG.cs.color },
-  { label: "Faculty", credential: "faculty@clearanceflow.edu", color: DEPT_CONFIG.basiced.color },
-  { label: "Admin", credential: "admin@clearanceflow.edu", color: DEPT_CONFIG.tesda.color },
-];
+const HINTS = DEMO_ACCOUNTS.map(account => ({
+  label: account.role === "superadmin" ? "Admin" : account.role === "faculty" ? "Teacher" : "Student",
+  credential: account.schoolId,
+  email: account.email,
+  department: account.department,
+  color: ROLE_COLORS[account.role],
+}));
 
 export default function Landing() {
   const router = useRouter();
@@ -62,20 +41,17 @@ export default function Landing() {
   const [resetMessage, setResetMessage] = useState("");
   const [resetLoading, setResetLoading] = useState(false);
 
-  const detected = credential.trim() ? classify(credential) : null;
+  const detected = classifyCredential(credential);
   const isStudent = detected?.view === "student";
+  const isFaculty = detected?.view === "faculty";
   const detectedLabel = isStudent
     ? "Student"
     : detected?.view === "faculty"
-    ? "Faculty"
+    ? "Teacher"
     : detected?.view === "superadmin"
-    ? "Administrator"
+    ? "Admin"
     : null;
-  const detectedColor = isStudent
-    ? DEPT_CONFIG[dept].color
-    : detected?.view === "faculty"
-    ? DEPT_CONFIG.basiced.color
-    : DEPT_CONFIG.tesda.color;
+  const detectedColor = detected ? ROLE_COLORS[detected.view] : undefined;
 
   const handleLogin = async (credentialOverride?: string, passwordOverride?: string) => {
     const loginCredential = credentialOverride ?? credential;
@@ -93,10 +69,8 @@ export default function Landing() {
     setSubmitting(true);
 
     try {
-      await login({ credential: loginCredential.trim(), password: loginPassword });
-      const { view } = classify(loginCredential);
-      // Redirect based on role
-      switch (view) {
+      const session = await login({ credential: loginCredential.trim(), password: loginPassword });
+      switch (session.account.role) {
         case "student":
           router.push("/dashboard/student");
           break;
@@ -116,7 +90,9 @@ export default function Landing() {
 
   const handleDemoLogin = (credential: string) => {
     setCredential(credential);
-    setPassword("password123");
+    const account = DEMO_ACCOUNTS.find(item => item.schoolId === credential);
+    if (account) setDept(account.department);
+    setPassword(DEMO_PASSWORD);
     setError("");
     setDemoOpen(false);
   };
@@ -227,14 +203,19 @@ export default function Landing() {
               {/* Credential Field with Live Detection */}
               <div>
                 <label className="text-xs font-semibold text-slate-600 block mb-1.5">
-                  Student ID or Email
+                  Student/Faculty ID or Email
                 </label>
                 <div className="relative">
                   <input
                     type="text"
                     value={credential}
                     onChange={(e) => {
-                      setCredential(e.target.value);
+                      const nextCredential = e.target.value;
+                      const nextDetection = classifyCredential(nextCredential);
+                      setCredential(nextCredential);
+                      if (nextDetection && nextDetection.view !== "superadmin") {
+                        setDept(nextDetection.dept);
+                      }
                       setError("");
                     }}
                     onKeyDown={(e) => e.key === "Enter" && handleLogin()}
@@ -255,8 +236,8 @@ export default function Landing() {
                     </span>
                   )}
                 </div>
-                {/* Department Picker — shown only when student ID detected */}
-                {isStudent && (
+                {/* Department selection is shown for both student and faculty sign-ins. */}
+                {(isStudent || isFaculty) && (
                   <div className="mt-3">
                     <label className="text-xs font-semibold text-slate-600 block mb-1.5">Department</label>
                     <div className="grid grid-cols-5 gap-1.5">
@@ -328,24 +309,6 @@ export default function Landing() {
             </div>
 
             <div className="mt-6 border-t border-slate-100 pt-4">
-              <div className="space-y-2">
-                <button
-                  type="button"
-                  className="w-full flex items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:shadow-md"
-                >
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">G</span>
-                  Log in with Gmail
-                </button>
-
-                <button
-                  type="button"
-                  className="w-full flex items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:shadow-md"
-                >
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#1877F2] text-[10px] font-bold text-white">f</span>
-                  Log in with Facebook
-                </button>
-              </div>
-
               <div className="relative mt-4">
                 <button
                   type="button"
@@ -374,17 +337,27 @@ export default function Landing() {
                   ].join(" ")}
                 >
                   <div className="space-y-2">
+                    <div className="custom-scroll max-h-60 space-y-1 overflow-y-auto">
                     {HINTS.map((h) => (
                       <button
-                        key={h.label}
+                        key={h.credential}
                         type="button"
                         onClick={() => handleDemoLogin(h.credential)}
                         className="w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-left transition hover:bg-white group"
                       >
                         <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: h.color }} />
-                        <span className="text-xs font-semibold text-slate-600 w-28 shrink-0">{h.label}</span>
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-center gap-2">
+                            <span className="text-xs font-semibold text-slate-700">{h.label}</span>
+                            {h.label !== "Admin" && (
+                              <span className="text-[10px] font-bold text-slate-400">{DEPT_CONFIG[h.department].abbr}</span>
+                            )}
+                          </span>
+                          <span className="block truncate text-[10px] text-slate-500">{h.credential} · {h.email}</span>
+                        </span>
                       </button>
                     ))}
+                    </div>
                   </div>
                 </div>
               </div>

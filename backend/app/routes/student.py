@@ -14,6 +14,7 @@ from app.core.database import get_session
 from app.models.account import ClearanceStatus, Student, UserRole
 from app.models.clearance import ClearanceEdge, ClearanceNode, ClearanceRequest, ScheduleSlot
 from app.routes.auth import get_current_account
+from app.services.kahn_service import KahnAlgorithmError, KahnService
 from app.schemas.student import StudentClearanceViewResponse, StudentResponse
 from app.schemas.clearance import ClearanceRequestResponse, ScheduleSlotResponse
 
@@ -55,11 +56,27 @@ async def get_student_clearance(
             detail="Student not found",
         )
 
-    # Get all clearance nodes in topological order (for display)
-    nodes_result = await session.execute(
-        select(ClearanceNode).order_by(ClearanceNode.position_y, ClearanceNode.position_x)
-    )
-    nodes = nodes_result.scalars().all()
+    # Sort requirements by their prerequisite graph before building the student view.
+    nodes_result = await session.execute(select(ClearanceNode))
+    nodes = list(nodes_result.scalars().all())
+    edges_result = await session.execute(select(ClearanceEdge))
+    edges = list(edges_result.scalars().all())
+    try:
+        with KahnService() as algorithm:
+            algorithm.create_handle(nodes, edges)
+            ordered_ids, has_cycle, _ = algorithm.execute()
+    except KahnAlgorithmError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Clearance requirements are invalid: {exc}",
+        ) from exc
+    if has_cycle:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Clearance requirements contain a cycle and cannot be ordered",
+        )
+    nodes_by_id = {str(node.id): node for node in nodes}
+    nodes = [nodes_by_id[node_id] for node_id in ordered_ids]
 
     # Get student's clearance requests
     requests_result = await session.execute(
@@ -68,9 +85,8 @@ async def get_student_clearance(
     )
     requests = {str(req.node_id): req for req in requests_result.scalars().all()}
 
-    edges_result = await session.execute(select(ClearanceEdge))
     prerequisites_by_node: dict[str, list[str]] = {}
-    for edge in edges_result.scalars().all():
+    for edge in edges:
         prerequisites_by_node.setdefault(str(edge.to_node_id), []).append(
             str(edge.from_node_id)
         )

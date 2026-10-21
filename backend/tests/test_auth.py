@@ -59,6 +59,16 @@ class TestAuthRoutes:
         assert data["faculty"]["school_id"] == "FAC-2026-088"
 
     @pytest.mark.asyncio
+    async def test_login_faculty_with_school_id(self, client: AsyncClient, demo_accounts):
+        response = await client.post(
+            "/api/v1/auth/login",
+            json={"credential": "FAC-2026-088", "password": "password123"},
+        )
+        assert response.status_code == 200
+        assert response.json()["account"]["role"] == "faculty"
+        assert response.json()["faculty"]["school_id"] == "FAC-2026-088"
+
+    @pytest.mark.asyncio
     async def test_login_admin_success(self, client: AsyncClient, demo_accounts):
         """Test successful superadmin login."""
         response = await client.post(
@@ -73,6 +83,16 @@ class TestAuthRoutes:
         assert data["account"]["role"] == "superadmin"
         assert data["faculty"] is not None
         assert data["faculty"]["is_superadmin"] is True
+
+    @pytest.mark.asyncio
+    async def test_login_admin_with_school_id(self, client: AsyncClient, demo_accounts):
+        response = await client.post(
+            "/api/v1/auth/login",
+            json={"credential": "ADM-2026-001", "password": "password123"},
+        )
+        assert response.status_code == 200
+        assert response.json()["account"]["role"] == "superadmin"
+        assert response.json()["faculty"]["is_superadmin"] is True
 
     @pytest.mark.asyncio
     async def test_login_invalid_credentials(self, client: AsyncClient):
@@ -129,6 +149,42 @@ class TestAuthRoutes:
         assert response.status_code == 200
         data = response.json()
         assert data["account"]["email"] == "student@clearanceflow.edu"
+
+    @pytest.mark.asyncio
+    async def test_update_profile_and_change_password(self, client: AsyncClient, demo_accounts):
+        login = await client.post(
+            "/api/v1/auth/login",
+            json={"credential": "student@clearanceflow.edu", "password": "password123"},
+        )
+        token = login.json()["token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        profile_response = await client.patch(
+            "/api/v1/auth/me",
+            headers=headers,
+            json={"bio": "Updated bio", "theme_preference": "light"},
+        )
+        assert profile_response.status_code == 200
+        assert profile_response.json()["bio"] == "Updated bio"
+        assert profile_response.json()["theme_preference"] == "light"
+
+        password_response = await client.post(
+            "/api/v1/auth/change-password",
+            headers=headers,
+            json={"current_password": "password123", "new_password": "newPassword123"},
+        )
+        assert password_response.status_code == 200
+
+        old_password_login = await client.post(
+            "/api/v1/auth/login",
+            json={"credential": "student@clearanceflow.edu", "password": "password123"},
+        )
+        new_password_login = await client.post(
+            "/api/v1/auth/login",
+            json={"credential": "student@clearanceflow.edu", "password": "newPassword123"},
+        )
+        assert old_password_login.status_code == 401
+        assert new_password_login.status_code == 200
 
     @pytest.mark.asyncio
     async def test_get_me_unauthenticated(self, client: AsyncClient):

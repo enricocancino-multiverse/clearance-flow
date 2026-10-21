@@ -151,7 +151,7 @@ async def demo_accounts(test_session: AsyncSession):
     )
 
     admin_faculty = Faculty(
-        school_id="FAC-2026-001",
+        school_id="ADM-2026-001",
         account_id=admin_account.id,
         department=Department.CS,
         is_superadmin=True,

@@ -9,7 +9,7 @@ import type { ProfileData } from "@/components/ProfilePage";
 
 export default function FreespaceDirectory() {
   const router = useRouter();
-  const { session, loading, logout } = useAuth();
+  const { session, loading } = useAuth();
   const [viewingProfile, setViewingProfile] = useState<ProfileData | null>(null);
 
   if (loading) {
@@ -26,8 +26,19 @@ export default function FreespaceDirectory() {
       setViewingProfile(null);
       return;
     }
-    logout();
-    router.replace("/");
+    if (session.account.role === "student") {
+      router.push("/dashboard/student");
+      return;
+    }
+    if (session.faculty?.is_superadmin) {
+      router.push("/dashboard/admin");
+      return;
+    }
+    if (session.account.role === "faculty") {
+      router.push("/dashboard/faculty");
+      return;
+    }
+    router.push("/");
   };
 
   if (viewingProfile) {

@@ -36,14 +36,13 @@ services:
       - DEBUG=true
       - ENVIRONMENT=development
       - CORS_ORIGINS=["http://localhost:3000","http://localhost:3001"]
-      - CPP_MODULE_PATH=./cpp_module/kahn_module.so
+      - CPP_MODULE_PATH=/app/cpp_module/kahn_module.so
     ports:
       - "8000:8000"
     volumes:
       - ./app:/app/app:ro
       - ./alembic:/app/alembic:ro
       - ./alembic.ini:/app/alembic.ini:ro
-      - ./cpp_module:/app/cpp_module:ro
     depends_on:
       postgres:
         condition: service_healthy

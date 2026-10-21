@@ -14,9 +14,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
-COPY pyproject.toml ./
+COPY pyproject.toml README.md ./
+COPY app ./app
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
     pip install --no-cache-dir -e .
+
+# Build the C ABI library consumed by the FastAPI ctypes service.
+COPY cpp_module/kahn_algorithm.cpp ./cpp_module/kahn_algorithm.cpp
+RUN mkdir -p ./cpp_module && \
+    g++ -O3 -shared -fPIC -std=c++17 ./cpp_module/kahn_algorithm.cpp \
+    -o ./cpp_module/kahn_module.so
 
 # ─── Runtime Stage ───────────────────────────────────────────────────────────
 FROM python:3.11-slim AS runtime
@@ -42,6 +49,7 @@ COPY alembic.ini ./
 
 # Create directory for C++ module
 RUN mkdir -p cpp_module
+COPY --from=builder /app/cpp_module/kahn_module.so ./cpp_module/kahn_module.so
 
 # Change ownership
 RUN chown -R appuser:appuser /app

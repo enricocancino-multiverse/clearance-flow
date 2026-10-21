@@ -1,8 +1,16 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { useTheme } from "../context/ThemeContext";
+import { useAuth } from "../context/AuthContext";
+import { adminApi, authApi } from "../lib/api";
+import type { Account } from "../types";
 import { useLiveDashboardState } from "../lib/liveDashboardState";
 import { DEPT_CONFIG, DeptKey } from "../types";
+import AlgorithmPlayground from "./AlgorithmPlayground";
+import AccountSettings from "./AccountSettings";
+import AdminScheduleManagement from "./AdminScheduleManagement";
+import FacultyGroupChat, { FacultyGroupChatButton } from "./FacultyGroupChat";
+import { runKahnSort } from "../lib/clearanceAlgorithms";
 
 interface Props {
   onViewProfile: () => void;
@@ -54,10 +62,10 @@ const DEPT_COUNTS = [
   { dept: "HM", students: 198, pending: 27, color: DEPT_CONFIG.hm.color },
   { dept: "CRIM", students: 245, pending: 39, color: DEPT_CONFIG.crim.color },
   { dept: "BSED", students: 176, pending: 22, color: DEPT_CONFIG.basiced.color },
-  { dept: "TVOC", students: 134, pending: 18, color: DEPT_CONFIG.tesda.color },
+  { dept: "HMT", students: 134, pending: 18, color: DEPT_CONFIG.tesda.color },
 ];
 
-type Tab = "graph" | "metrics" | "users";
+type Tab = "graph" | "algorithm" | "metrics" | "scheduling" | "users";
 
 export default function AdminDashboard({ onViewProfile, onFreespace, onSignOut }: Props) {
   const { isDark } = useTheme();
@@ -67,6 +75,12 @@ export default function AdminDashboard({ onViewProfile, onFreespace, onSignOut }
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [mode, setMode] = useState<"view" | "draw" | "delete">("view");
   const [activeTab, setActiveTab] = useState<Tab>("graph");
+  const [graphError, setGraphError] = useState("");
+
+  useEffect(() => {
+    setNodes(state.graphNodes.length ? state.graphNodes as GraphNode[] : INITIAL_NODES);
+    setEdges(state.graphEdges.length ? state.graphEdges as GraphEdge[] : INITIAL_EDGES);
+  }, [state.graphNodes, state.graphEdges]);
 
   const bg = isDark ? "bg-slate-950" : "bg-gray-50";
   const navBg = isDark ? "bg-slate-900/80 border-slate-800" : "bg-white/90 border-gray-200";
@@ -92,6 +106,14 @@ export default function AdminDashboard({ onViewProfile, onFreespace, onSignOut }
           const exists = edges.some(e => e.from === selectedNode && e.to === id);
           if (!exists) {
             const nextEdges = [...edges, { from: selectedNode, to: id }];
+            try {
+              runKahnSort(nodes, nextEdges);
+              setGraphError("");
+            } catch (cause) {
+              setGraphError(cause instanceof Error ? cause.message : "This rule would make the graph invalid.");
+              setSelectedNode(null);
+              return;
+            }
             setEdges(nextEdges);
             setGraph(
               nodes.map(node => ({ ...node, office: node.label, status: "locked", prerequisites: [] })),
@@ -107,14 +129,13 @@ export default function AdminDashboard({ onViewProfile, onFreespace, onSignOut }
   };
 
   const deleteEdge = (from: string, to: string) => {
-    if (mode === "delete") {
-      const nextEdges = edges.filter(e => !(e.from === from && e.to === to));
-      setEdges(nextEdges);
-      setGraph(
-        nodes.map(node => ({ ...node, office: node.label, status: "locked", prerequisites: [] })),
-        nextEdges.map(edge => ({ from: edge.from, to: edge.to }))
-      );
-    }
+    const nextEdges = edges.filter(e => !(e.from === from && e.to === to));
+    setEdges(nextEdges);
+    setGraph(
+      nodes.map(node => ({ ...node, office: node.label, status: "locked", prerequisites: [] })),
+      nextEdges.map(edge => ({ from: edge.from, to: edge.to }))
+    );
+    setGraphError("");
   };
 
   const addNode = () => {
@@ -177,9 +198,6 @@ export default function AdminDashboard({ onViewProfile, onFreespace, onSignOut }
     );
   };
 
-  const totalStudents = DEPT_COUNTS.reduce((s, d) => s + d.students, 0);
-  const totalPending = DEPT_COUNTS.reduce((s, d) => s + d.pending, 0);
-
   return (
     <div
       className={`min-h-screen ${bg} transition-colors duration-300`}
@@ -209,7 +227,7 @@ export default function AdminDashboard({ onViewProfile, onFreespace, onSignOut }
 
           {/* Tabs */}
           <div className={`flex gap-1 rounded-xl p-1 ${isDark ? "bg-slate-800" : "bg-gray-100"}`}>
-            {(["graph", "metrics", "users"] as const).map(tab => (
+            {(["graph", "algorithm", "metrics", "scheduling", "users"] as const).map(tab => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -223,7 +241,15 @@ export default function AdminDashboard({ onViewProfile, onFreespace, onSignOut }
                     : "text-gray-500 hover:text-gray-700"
                 }`}
               >
-                {tab === "graph" ? "⬡ Graph Rules" : tab === "metrics" ? "⚡ Algorithm Metrics" : "👥 User Management"}
+                {tab === "graph"
+                  ? "⬡ Graph Rules"
+                  : tab === "algorithm"
+                    ? "▶ Algorithm Demo"
+                    : tab === "metrics"
+                      ? "⚡ Algorithm Metrics"
+                      : tab === "scheduling"
+                        ? "📅 Scheduling"
+                        : "👥 User Management"}
               </button>
             ))}
           </div>
@@ -241,6 +267,8 @@ export default function AdminDashboard({ onViewProfile, onFreespace, onSignOut }
               <circle cx="7" cy="7" r="3" />
             </svg>
           </button>
+          <FacultyGroupChatButton className={muted} />
+          <AccountSettings onCustomizeAccount={onViewProfile} />
           <button
             type="button"
             onClick={onSignOut}
@@ -252,31 +280,7 @@ export default function AdminDashboard({ onViewProfile, onFreespace, onSignOut }
       </header>
 
       <div className="max-w-7xl mx-auto px-6 py-6">
-        {/* Summary cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          {[
-            { label: "Total Students", value: totalStudents, unit: "", color: "#94a3b8", mono: true },
-            { label: "Active Clearances", value: totalPending, unit: "", color: "#3B82F6", mono: true },
-            { label: "Avg Exec Time", value: "3.65", unit: "ms", color: "#10B981", mono: true },
-            { label: "Graph Complexity", value: "O(V+E)", unit: "", color: "#8B5CF6", mono: false },
-          ].map(cardData => (
-            <div key={cardData.label} className={`rounded-xl border p-4 ${card}`}>
-              <div
-                className="text-2xl font-bold"
-                style={{
-                  color: cardData.color,
-                  fontFamily: cardData.mono ? "JetBrains Mono, monospace" : "Outfit, sans-serif",
-                }}
-              >
-                {cardData.value}
-                {cardData.unit && <span className="text-sm ml-1">{cardData.unit}</span>}
-              </div>
-              <div className={`text-xs mt-1 ${muted}`} style={{ fontFamily: "Inter, sans-serif" }}>
-                {cardData.label}
-              </div>
-            </div>
-          ))}
-        </div>
+        <FacultyGroupChat />
 
         {activeTab === "graph" && (
           <GraphBuilder
@@ -292,6 +296,7 @@ export default function AdminDashboard({ onViewProfile, onFreespace, onSignOut }
             onReset={resetGraph}
             onNodeMove={moveNode}
             onRenameNode={renameNode}
+            graphError={graphError}
             isDark={isDark}
             card={card}
             text={text}
@@ -301,6 +306,21 @@ export default function AdminDashboard({ onViewProfile, onFreespace, onSignOut }
 
         {activeTab === "metrics" && (
           <MetricsDashboard data={EXEC_DATA} deptCounts={DEPT_COUNTS} isDark={isDark} card={card} text={text} muted={muted} />
+        )}
+
+        {activeTab === "scheduling" && (
+          <AdminScheduleManagement isDark={isDark} card={card} text={text} muted={muted} />
+        )}
+
+        {activeTab === "algorithm" && (
+          <AlgorithmPlayground
+            nodes={nodes}
+            edges={edges}
+            isDark={isDark}
+            card={card}
+            text={text}
+            muted={muted}
+          />
         )}
 
         {activeTab === "users" && (
@@ -324,6 +344,7 @@ function GraphBuilder({
   onReset,
   onNodeMove,
   onRenameNode,
+  graphError,
   isDark,
   card,
   text,
@@ -341,6 +362,7 @@ function GraphBuilder({
   onReset: () => void;
   onNodeMove: (id: string, x: number, y: number) => void;
   onRenameNode: (id: string, label: string) => void;
+  graphError: string;
   isDark: boolean;
   card: string;
   text: string;
@@ -654,11 +676,12 @@ function GraphBuilder({
         <div className={`rounded-2xl border p-5 ${card}`}>
           <h3 className={`text-sm font-bold ${text} mb-2`}>Graph Validation</h3>
           <div className="space-y-2">
-            <StatusLine label="Cycle Detection" value="No cycles found" ok isDark={isDark} />
-            <StatusLine label="DAG Valid" value="Yes" ok isDark={isDark} />
+            <StatusLine label="Cycle Detection" value={graphError ? "Cycle / invalid rule" : "No cycles found"} ok={!graphError} isDark={isDark} />
+            <StatusLine label="DAG Valid" value={graphError ? "No" : "Yes"} ok={!graphError} isDark={isDark} />
             <StatusLine label="Reachability" value={`${nodes.length} nodes`} ok isDark={isDark} />
             <StatusLine label="Edge Count" value={`${edges.length} rules`} ok isDark={isDark} />
           </div>
+          {graphError && <p role="alert" className="mt-3 text-xs text-rose-400">{graphError}</p>}
         </div>
       </div>
     </div>
@@ -706,7 +729,7 @@ function MetricsDashboard({
         <div className="mb-4">
           <h3 className={`text-sm font-bold ${text}`}>Kahn's Algorithm — Execution Time</h3>
           <p className={`text-xs mt-0.5 ${muted}`} style={{ fontFamily: "Inter, sans-serif" }}>
-            O(V+E) linear scaling across simulated user counts
+            O((V+E) log V) with a min-heap for greedy eligible-node selection
           </p>
         </div>
         <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
@@ -827,7 +850,7 @@ function MetricsDashboard({
 
       {/* Scaling table */}
       <div className={`rounded-2xl border p-6 ${card}`}>
-        <h3 className={`text-sm font-bold ${text} mb-4`}>O(V+E) Traversal Metrics</h3>
+        <h3 className={`text-sm font-bold ${text} mb-4`}>O((V+E) log V) Traversal Metrics</h3>
         <div className="space-y-0">
           <div
             className={`grid grid-cols-4 gap-2 px-3 py-2 text-xs font-bold border-b ${
@@ -920,14 +943,16 @@ function UserManagement({
     "Computer Science",
     "Hospitality Management",
     "Criminology",
-    "Basic Education (8 to K12)",
-    "TESDA",
+    "Basic Education",
+    "HMT",
     "General Education",
   ];
 
   type AccountRow = {
+    accountId?: string;
+    email?: string;
     name: string;
-    role: "Faculty Admin" | "Student";
+    role: "Faculty Admin" | "Student" | "Superadmin";
     department: string;
     deptCode?: string;
     year?: string;
@@ -940,8 +965,8 @@ function UserManagement({
     { name: "Dr. Juana Dela Cruz", role: "Faculty Admin", department: "Computer Science", deptCode: "CS", status: "Active", lastLogin: "2h ago" },
     { name: "Prof. Ramon Gonzales", role: "Faculty Admin", department: "Hospitality Management", deptCode: "HM", status: "Active", lastLogin: "1d ago" },
     { name: "Ms. Elena Villanueva", role: "Faculty Admin", department: "Criminology", deptCode: "CRIM", status: "In Class", lastLogin: "30min ago" },
-    { name: "Mr. Patrick Sy", role: "Faculty Admin", department: "Basic Education (8 to K12)", deptCode: "BE", status: "Away", lastLogin: "3h ago" },
-    { name: "Ms. Grace Tolentino", role: "Faculty Admin", department: "TESDA", deptCode: "TESDA", status: "Active", lastLogin: "45min ago" },
+    { name: "Mr. Patrick Sy", role: "Faculty Admin", department: "Basic Education", deptCode: "BSED", status: "Away", lastLogin: "3h ago" },
+    { name: "Ms. Grace Tolentino", role: "Faculty Admin", department: "HMT", deptCode: "HMT", status: "Active", lastLogin: "45min ago" },
     { name: "Mr. Adrian Ramos", role: "Faculty Admin", department: "General Education", deptCode: "GEN", status: "Active", lastLogin: "1h ago" },
   ];
 
@@ -949,16 +974,75 @@ function UserManagement({
     { name: "Alyssa M. Santos", role: "Student", department: "Computer Science", year: "3rd Year", batch: "2026-2027", status: "Clearance Active", lastLogin: "Today" },
     { name: "Joel D. Reyes", role: "Student", department: "Hospitality Management", year: "2nd Year", batch: "2026-2027", status: "Verified", lastLogin: "Yesterday" },
     { name: "Rhea C. Lim", role: "Student", department: "Criminology", year: "4th Year", batch: "2026-2027", status: "Hold", lastLogin: "2d ago" },
-    { name: "Mika P. Torres", role: "Student", department: "Basic Education (8 to K12)", year: "Grade 10", batch: "2026-2027", status: "Clearance Active", lastLogin: "Today" },
-    { name: "Nathan V. Perez", role: "Student", department: "TESDA", year: "1st Year", batch: "2026-2027", status: "Verified", lastLogin: "3h ago" },
+    { name: "Mika P. Torres", role: "Student", department: "Basic Education", year: "Grade 10", batch: "2026-2027", status: "Clearance Active", lastLogin: "Today" },
+    { name: "Nathan V. Perez", role: "Student", department: "HMT", year: "1st Year", batch: "2026-2027", status: "Verified", lastLogin: "3h ago" },
     { name: "Celine A. Bautista", role: "Student", department: "General Education", year: "1st Year", batch: "2026-2027", status: "Clearance Active", lastLogin: "Today" },
   ];
 
-  const accountLists: Record<"all" | "faculty" | "student", AccountRow[]> = {
-    faculty: teacherAccounts,
-    student: studentAccounts,
-    all: [...teacherAccounts, ...studentAccounts],
+  const { session } = useAuth();
+  const [managedAccounts, setManagedAccounts] = useState<Account[]>([]);
+  const [accountsLoaded, setAccountsLoaded] = useState(false);
+  const [accountError, setAccountError] = useState("");
+  const [accountMessage, setAccountMessage] = useState("");
+  const [accountModalOpen, setAccountModalOpen] = useState(false);
+  const [creatingAccount, setCreatingAccount] = useState(false);
+  const [newAccount, setNewAccount] = useState({
+    email: "",
+    password: "",
+    role: "student" as "student" | "faculty",
+    school_id: "",
+    department: "cs" as DeptKey,
+    year_level: 1,
+    section: "BSCS-1A",
+  });
+
+  const refreshAccounts = async () => {
+    const users = await adminApi.getUsers();
+    setManagedAccounts(users);
+    setAccountsLoaded(true);
   };
+
+  useEffect(() => {
+    let mounted = true;
+    adminApi.getUsers()
+      .then(users => {
+        if (mounted) {
+          setManagedAccounts(users);
+          setAccountsLoaded(true);
+        }
+      })
+      .catch(cause => {
+        if (mounted) {
+          setAccountError(cause instanceof Error ? cause.message : "Unable to load accounts.");
+          setAccountsLoaded(true);
+        }
+      });
+    return () => { mounted = false; };
+  }, []);
+
+  const liveAccounts: AccountRow[] = managedAccounts.map(account => ({
+    accountId: account.account_id,
+    email: account.email,
+    name: account.email.split("@")[0],
+    role: account.role === "student" ? "Student" : account.role === "superadmin" ? "Superadmin" : "Faculty Admin",
+    department: account.department ? DEPT_CONFIG[account.department].label : "General Education",
+    deptCode: account.department ? DEPT_CONFIG[account.department].abbr : undefined,
+    year: account.role === "student" ? "—" : undefined,
+    batch: "2026-2027",
+    status: "Active",
+    lastLogin: new Date(account.updated_at).toLocaleDateString(),
+  }));
+  const accountLists: Record<"all" | "faculty" | "student", AccountRow[]> = accountsLoaded
+    ? {
+        all: liveAccounts,
+        faculty: liveAccounts.filter(account => account.role !== "Student"),
+        student: liveAccounts.filter(account => account.role === "Student"),
+      }
+    : {
+        faculty: teacherAccounts,
+        student: studentAccounts,
+        all: [...teacherAccounts, ...studentAccounts],
+      };
 
   const filteredAccounts = accountLists[roleFilter].filter(account => {
     const departmentMatch =
@@ -974,6 +1058,7 @@ function UserManagement({
     const searchMatch =
       searchTerm.trim() === "" ||
       account.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (account.email?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false) ||
       account.department.toLowerCase().includes(searchTerm.toLowerCase());
 
     return departmentMatch && yearMatch && batchMatch && searchMatch;
@@ -993,8 +1078,8 @@ function UserManagement({
     "Computer Science": DEPT_CONFIG.cs.color,
     "Hospitality Management": DEPT_CONFIG.hm.color,
     "Criminology": DEPT_CONFIG.crim.color,
-    "Basic Education (8 to K12)": DEPT_CONFIG.basiced.color,
-    TESDA: DEPT_CONFIG.tesda.color,
+    "Basic Education": DEPT_CONFIG.basiced.color,
+    HMT: DEPT_CONFIG.tesda.color,
     "General Education": "#94a3b8",
   };
 
@@ -1007,17 +1092,63 @@ function UserManagement({
 
   const batchHistory = ["2024-2025", "2025-2026", "2026-2027"];
   const yearOptions =
-    departmentFilter === "TESDA"
+    departmentFilter === "HMT"
       ? ["all", "1st Year", "2nd Year", "3rd Year"]
-      : departmentFilter === "Basic Education (8 to K12)"
+      : departmentFilter === "Basic Education"
         ? ["all", "Grade 8", "Grade 9", "Grade 10", "Grade 11", "Grade 12"]
         : ["all", "1st Year", "2nd Year", "3rd Year", "4th Year"];
+
+  const createAccount = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setCreatingAccount(true);
+    setAccountError("");
+    setAccountMessage("");
+    try {
+      const result = await authApi.createAccount({
+        ...newAccount,
+        email: newAccount.email.trim(),
+        school_id: newAccount.school_id.trim(),
+      });
+      await refreshAccounts();
+      setAccountModalOpen(false);
+      setNewAccount({
+        email: "",
+        password: "",
+        role: "student",
+        school_id: "",
+        department: "cs",
+        year_level: 1,
+        section: "BSCS-1A",
+      });
+      setAccountMessage(`Created ${result.email}. Temporary password: ${result.temporary_password}`);
+    } catch (cause) {
+      setAccountError(cause instanceof Error ? cause.message : "Unable to create this account.");
+    } finally {
+      setCreatingAccount(false);
+    }
+  };
+
+  const removeAccount = async (account: AccountRow) => {
+    if (!account.accountId || !window.confirm(`Delete ${account.email ?? account.name}? This cannot be undone.`)) return;
+    setAccountError("");
+    setAccountMessage("");
+    try {
+      await adminApi.deleteUser(account.accountId);
+      setManagedAccounts(current => current.filter(item => item.account_id !== account.accountId));
+      setAccountMessage(`Deleted ${account.email ?? account.name}.`);
+    } catch (cause) {
+      setAccountError(cause instanceof Error ? cause.message : "Unable to delete this account.");
+    }
+  };
 
   return (
     <div className={`rounded-2xl border overflow-hidden ${card}`}>
       <div className={`px-6 py-4 border-b ${isDark ? "border-slate-800" : "border-gray-200"}`}>
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <h2 className={`text-sm font-bold ${text}`}>User Management</h2>
+          <div>
+            <h2 className={`text-sm font-bold ${text}`}>User Management</h2>
+            <p className={`mt-1 text-[11px] ${muted}`}>{accountsLoaded ? `${managedAccounts.length} system accounts` : "Loading system accounts…"}</p>
+          </div>
 
           <div className="flex flex-wrap items-center gap-2">
             <div className={`flex items-center gap-2 rounded-lg border px-2 py-1.5 ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-gray-200"}`}>
@@ -1086,11 +1217,13 @@ function UserManagement({
               ))}
             </select>
 
-            <button className="px-4 py-1.5 rounded-lg text-xs font-bold bg-violet-600 text-white hover:bg-violet-500 transition-colors">
+            <button type="button" onClick={() => { setAccountError(""); setAccountMessage(""); setAccountModalOpen(true); }} className="px-4 py-1.5 rounded-lg text-xs font-bold bg-violet-600 text-white hover:bg-violet-500 transition-colors">
               + Add Account
             </button>
           </div>
         </div>
+        {accountError && <p role="alert" className="mt-3 text-xs text-rose-400">{accountError}</p>}
+        {accountMessage && <p role="status" className="mt-3 text-xs text-emerald-400">{accountMessage}</p>}
       </div>
 
       <div className={`divide-y ${isDark ? "divide-slate-800" : "divide-gray-200"}`}>
@@ -1120,7 +1253,7 @@ function UserManagement({
                 <div className="flex-1 min-w-0">
                   <div className={`text-sm font-semibold ${text}`}>{account.name}</div>
                   <div className={`text-xs mt-0.5 ${muted}`} style={{ fontFamily: "Inter, sans-serif" }}>
-                    {account.role}
+                    {account.role}{account.email ? ` · ${account.email}` : ""}
                   </div>
                 </div>
 
@@ -1145,12 +1278,46 @@ function UserManagement({
                   <span className={`text-xs shrink-0 ${muted}`} style={{ fontFamily: "JetBrains Mono, monospace" }}>
                     {account.lastLogin}
                   </span>
+                  {account.accountId && account.accountId !== session?.account.account_id && account.role !== "Superadmin" && (
+                    <button type="button" onClick={() => removeAccount(account)} className="rounded-md px-2 py-1 text-xs text-rose-400 hover:bg-rose-500/10" aria-label={`Delete ${account.email ?? account.name}`}>Delete</button>
+                  )}
                 </div>
               </div>
             );
           })
         )}
       </div>
+
+      {accountModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/75 p-4">
+          <form onSubmit={createAccount} className="my-8 w-full max-w-lg space-y-3 rounded-2xl border border-slate-700 bg-slate-900 p-5 text-slate-100 shadow-2xl">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-base font-bold">Create student or faculty account</h3>
+                <p className="mt-1 text-xs text-slate-400">The account must change this password after first sign-in.</p>
+              </div>
+              <button type="button" onClick={() => setAccountModalOpen(false)} aria-label="Close account form" className="text-xl text-slate-400">×</button>
+            </div>
+            <label className="block text-xs text-slate-300">Email<input required type="email" value={newAccount.email} onChange={event => setNewAccount(current => ({ ...current, email: event.target.value }))} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" /></label>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="block text-xs text-slate-300">Account type<select value={newAccount.role} onChange={event => setNewAccount(current => ({ ...current, role: event.target.value as "student" | "faculty" }))} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm"><option value="student">Student</option><option value="faculty">Faculty / Teacher</option></select></label>
+              <label className="block text-xs text-slate-300">School ID<input required value={newAccount.school_id} onChange={event => setNewAccount(current => ({ ...current, school_id: event.target.value }))} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" /></label>
+            </div>
+            <label className="block text-xs text-slate-300">Department<select value={newAccount.department} onChange={event => setNewAccount(current => ({ ...current, department: event.target.value as DeptKey }))} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm">{Object.entries(DEPT_CONFIG).map(([key, config]) => <option key={key} value={key}>{config.label}</option>)}</select></label>
+            {newAccount.role === "student" && (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label className="block text-xs text-slate-300">Year level<input required type="number" min={1} max={4} value={newAccount.year_level} onChange={event => setNewAccount(current => ({ ...current, year_level: Number(event.target.value) }))} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" /></label>
+                <label className="block text-xs text-slate-300">Section<input required value={newAccount.section} onChange={event => setNewAccount(current => ({ ...current, section: event.target.value }))} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" /></label>
+              </div>
+            )}
+            <label className="block text-xs text-slate-300">Temporary password<input required type="password" minLength={8} autoComplete="new-password" value={newAccount.password} onChange={event => setNewAccount(current => ({ ...current, password: event.target.value }))} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" /></label>
+            <div className="flex justify-end gap-2 pt-2">
+              <button type="button" onClick={() => setAccountModalOpen(false)} className="rounded-lg border border-slate-600 px-4 py-2 text-xs font-semibold text-slate-300">Cancel</button>
+              <button type="submit" disabled={creatingAccount} className="rounded-lg bg-violet-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-60">{creatingAccount ? "Creating…" : "Create account"}</button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

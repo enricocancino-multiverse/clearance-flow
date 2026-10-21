@@ -28,6 +28,25 @@ export interface QueueEntry {
   total: number;
 }
 
+export interface LiveClearanceRequest {
+  id: string;
+  studentAccountId: string;
+  studentName: string;
+  nodeId: string;
+  status: "pending" | "approved" | "held";
+  submittedAt: string;
+  holdReason?: string;
+}
+
+export type StudentClearanceStatus = "pending" | "office" | "cleared";
+
+export interface LiveStudentSummary {
+  accountId: string;
+  name: string;
+  studentNumber: string;
+  department: string;
+}
+
 export interface LiveDashboardState {
   graphNodes: LiveGraphNode[];
   graphEdges: LiveGraphEdge[];
@@ -35,6 +54,9 @@ export interface LiveDashboardState {
   facultyAvailability: "accepting" | "in-class" | "away";
   completedNodeIds: string[];
   requestDecisions: Record<string, "pending" | "approved" | "held">;
+  clearanceRequests: LiveClearanceRequest[];
+  students: Record<string, LiveStudentSummary>;
+  studentClearanceRecords: Record<string, Record<string, StudentClearanceStatus>>;
   updatedAt: number;
 }
 
@@ -71,6 +93,9 @@ export const DEFAULT_LIVE_STATE: LiveDashboardState = {
   facultyAvailability: "accepting",
   completedNodeIds: INITIAL_GRAPH_NODES.filter(node => node.status === "completed").map(node => node.id),
   requestDecisions: {},
+  clearanceRequests: [],
+  students: {},
+  studentClearanceRecords: {},
   updatedAt: Date.now(),
 };
 
@@ -88,10 +113,18 @@ function normalizeLiveState(rawState: Partial<LiveDashboardState>): LiveDashboar
     from: edge.from === "osas" ? "sas" : edge.from,
     to: edge.to === "osas" ? "sas" : edge.to,
   }));
+  const prerequisitesByNode = new Map<string, string[]>();
+  for (const edge of graphEdges) {
+    prerequisitesByNode.set(edge.to, [...(prerequisitesByNode.get(edge.to) ?? []), edge.from]);
+  }
+  const nodesWithPrerequisites = rawNodes.map(node => ({
+    ...node,
+    prerequisites: prerequisitesByNode.get(node.id) ?? [],
+  }));
 
-  const completedNodeIds = rawState.completedNodeIds ?? rawNodes.filter(node => node.status === "completed").map(node => node.id);
+  const completedNodeIds = rawState.completedNodeIds ?? nodesWithPrerequisites.filter(node => node.status === "completed").map(node => node.id);
   const completed = new Set(completedNodeIds);
-  const graphNodes = rawNodes.map(node => ({
+  const graphNodes = nodesWithPrerequisites.map(node => ({
     ...node,
     status: completed.has(node.id)
       ? "completed" as const
@@ -107,6 +140,9 @@ function normalizeLiveState(rawState: Partial<LiveDashboardState>): LiveDashboar
     facultyAvailability: rawState.facultyAvailability ?? "accepting",
     completedNodeIds,
     requestDecisions: rawState.requestDecisions ?? {},
+    clearanceRequests: rawState.clearanceRequests ?? [],
+    students: rawState.students ?? {},
+    studentClearanceRecords: rawState.studentClearanceRecords ?? {},
     updatedAt: rawState.updatedAt ?? Date.now(),
   };
 }
@@ -187,6 +223,12 @@ export function useLiveDashboardState() {
         graphNodes: nodes,
         graphEdges: edges,
         completedNodeIds: prev.completedNodeIds.filter(id => nodes.some(node => node.id === id)),
+        studentClearanceRecords: Object.fromEntries(
+          Object.entries(prev.studentClearanceRecords).map(([studentId, records]) => [
+            studentId,
+            Object.fromEntries(Object.entries(records).filter(([nodeId]) => nodes.some(node => node.id === nodeId))),
+          ])
+        ),
         updatedAt: Date.now(),
       });
       persistState(next);
@@ -238,6 +280,156 @@ export function useLiveDashboardState() {
     });
   }, []);
 
+  const submitClearanceRequest = useCallback((request: Omit<LiveClearanceRequest, "id" | "status" | "submittedAt">) => {
+    setState(prev => {
+      const alreadySubmitted = prev.clearanceRequests.some(existing =>
+        existing.studentAccountId === request.studentAccountId &&
+        existing.nodeId === request.nodeId &&
+        existing.status !== "held"
+      );
+      if (alreadySubmitted) return prev;
+      const next = normalizeLiveState({
+        ...prev,
+        clearanceRequests: [
+          ...prev.clearanceRequests,
+          {
+            ...request,
+            id: `${request.studentAccountId}:${request.nodeId}:${Date.now()}`,
+            status: "pending",
+            submittedAt: new Date().toISOString(),
+          },
+        ],
+        updatedAt: Date.now(),
+      });
+      persistState(next);
+      emitSync(next);
+      return next;
+    });
+  }, []);
+
+  const setClearanceRequestStatus = useCallback((requestId: string, status: LiveClearanceRequest["status"], holdReason?: string) => {
+    setState(prev => {
+      const next = normalizeLiveState({
+        ...prev,
+        clearanceRequests: prev.clearanceRequests.map(request =>
+          request.id === requestId
+            ? { ...request, status, ...(holdReason ? { holdReason } : { holdReason: undefined }) }
+            : request
+        ),
+        updatedAt: Date.now(),
+      });
+      persistState(next);
+      emitSync(next);
+      return next;
+    });
+  }, []);
+
+  const registerStudent = useCallback((student: LiveStudentSummary) => {
+    setState(prev => {
+      const existingRecords = prev.studentClearanceRecords[student.accountId] ?? {};
+      const requestRecords = Object.fromEntries(
+        prev.clearanceRequests
+          .filter(request => request.studentAccountId === student.accountId)
+          .map(request => [
+            request.nodeId,
+            request.status === "approved" ? "cleared" : request.status === "held" ? "office" : "pending",
+          ])
+      ) as Record<string, StudentClearanceStatus>;
+      const initialRecords = Object.fromEntries(
+        prev.graphNodes
+          .filter(node => node.status === "completed")
+          .map(node => [node.id, "cleared" as const])
+      );
+      const next = normalizeLiveState({
+        ...prev,
+        students: { ...prev.students, [student.accountId]: student },
+        studentClearanceRecords: {
+          ...prev.studentClearanceRecords,
+          [student.accountId]: { ...initialRecords, ...requestRecords, ...existingRecords },
+        },
+        updatedAt: Date.now(),
+      });
+      persistState(next);
+      emitSync(next);
+      return next;
+    });
+  }, []);
+
+  const setStudentClearanceStatus = useCallback((
+    studentAccountId: string,
+    nodeId: string,
+    status: StudentClearanceStatus,
+    holdReason?: string,
+  ) => {
+    setState(prev => {
+      const records = prev.studentClearanceRecords[studentAccountId] ?? {};
+      const statusFor = (candidateNodeId: string): StudentClearanceStatus =>
+        records[candidateNodeId] ??
+        (prev.clearanceRequests.some(request =>
+          request.studentAccountId === studentAccountId &&
+          request.nodeId === candidateNodeId &&
+          request.status === "approved"
+        )
+          ? "cleared"
+          : prev.clearanceRequests.some(request =>
+              request.studentAccountId === studentAccountId &&
+              request.nodeId === candidateNodeId &&
+              request.status === "held"
+            )
+            ? "office"
+            : prev.graphNodes.find(node => node.id === candidateNodeId)?.status === "completed"
+              ? "cleared"
+              : "pending");
+      const prerequisites = prev.graphEdges.filter(edge => edge.to === nodeId);
+      if (status !== "pending" && !prerequisites.every(edge => statusFor(edge.from) === "cleared")) {
+        return prev;
+      }
+
+      const resetNodeIds = new Set([nodeId]);
+      if (status === "pending") {
+        let expanded = true;
+        while (expanded) {
+          expanded = false;
+          for (const edge of prev.graphEdges) {
+            if (resetNodeIds.has(edge.from) && !resetNodeIds.has(edge.to)) {
+              resetNodeIds.add(edge.to);
+              expanded = true;
+            }
+          }
+        }
+      }
+      const clearanceRequests = status === "pending"
+        ? prev.clearanceRequests.filter(request =>
+            request.studentAccountId !== studentAccountId || !resetNodeIds.has(request.nodeId)
+          )
+        : prev.clearanceRequests.map(request =>
+            request.studentAccountId === studentAccountId && request.nodeId === nodeId
+              ? {
+                  ...request,
+                  status: status === "cleared" ? "approved" as const : "held" as const,
+                  holdReason: status === "office" ? holdReason ?? "Please visit the responsible office." : undefined,
+                }
+              : request
+          );
+      const next = normalizeLiveState({
+        ...prev,
+        studentClearanceRecords: {
+          ...prev.studentClearanceRecords,
+          [studentAccountId]: {
+            ...records,
+            ...Object.fromEntries([...resetNodeIds].map(resetId => [resetId, "pending" as const])),
+            ...(status === "pending" ? {} : { [nodeId]: status }),
+          },
+        },
+        clearanceRequests,
+        updatedAt: Date.now(),
+      });
+      persistState(next);
+      emitSync(next);
+      return next;
+    });
+  }, []);
+
   return {
     state,
     replaceState,
@@ -246,5 +438,9 @@ export function useLiveDashboardState() {
     setAvailability,
     completeNode,
     setRequestDecision,
+    submitClearanceRequest,
+    setClearanceRequestStatus,
+    registerStudent,
+    setStudentClearanceStatus,
   };
 }

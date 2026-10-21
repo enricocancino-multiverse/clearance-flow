@@ -7,8 +7,10 @@ It handles loading the shared library, data conversion, and error handling.
 
 import ctypes
 import logging
-import os
 import platform
+import time
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -33,6 +35,8 @@ class KahnService:
     def __init__(self):
         self._lib: Optional[ctypes.CDLL] = None
         self._handle: Optional[ctypes.c_void_p] = None
+        self._nodes: list[ClearanceNode] = []
+        self._edges: list[ClearanceEdge] = []
         self._load_library()
 
     def _load_library(self) -> None:
@@ -137,10 +141,14 @@ class KahnService:
 
     def create_handle(self, nodes: list[ClearanceNode], edges: list[ClearanceEdge]) -> bool:
         """Create algorithm handle with graph data."""
+        self._nodes = list(nodes)
+        self._edges = list(edges)
+        self._validate_graph()
+
         if not self._lib:
             return False
 
-        if not self._handle is None:
+        if self._handle is not None:
             self.destroy_handle()
 
         try:
@@ -160,6 +168,24 @@ class KahnService:
             logger.error(f"Failed to create Kahn handle: {e}")
             return False
 
+    def _validate_graph(self) -> None:
+        node_ids = [str(node.id) for node in self._nodes]
+        if len(node_ids) != len(set(node_ids)):
+            raise KahnAlgorithmError("Graph contains duplicate node IDs")
+
+        known_ids = set(node_ids)
+        edges: set[tuple[str, str]] = set()
+        for edge in self._edges:
+            source = str(edge.from_node_id)
+            target = str(edge.to_node_id)
+            if source not in known_ids or target not in known_ids:
+                raise KahnAlgorithmError("Every edge must connect two existing nodes")
+            if source == target:
+                raise KahnAlgorithmError("A node cannot depend on itself")
+            if (source, target) in edges:
+                raise KahnAlgorithmError("Graph contains duplicate edges")
+            edges.add((source, target))
+
     def destroy_handle(self) -> None:
         """Destroy algorithm handle."""
         if self._lib and self._handle:
@@ -177,17 +203,22 @@ class KahnService:
         Returns:
             Tuple of (sorted_node_ids, has_cycle, metrics)
         """
+        if simulated_users < 0:
+            raise ValueError("simulated_users cannot be negative")
         if self._lib and self._handle:
             return self._execute_cpp(simulated_users)
-        else:
-            return self._execute_python_fallback(simulated_users)
+        return self._execute_python_fallback(simulated_users)
 
     def _execute_cpp(self, simulated_users: int) -> tuple[list[str], bool, AlgorithmMetricsResponse]:
         """Execute using C++ module."""
+        if not self._lib or not self._handle:
+            raise KahnAlgorithmError("C++ algorithm handle is not initialized")
+
         sorted_ids_ptr = ctypes.POINTER(ctypes.c_char_p)()
         count = ctypes.c_int(0)
         has_cycle = ctypes.c_int(0)
 
+        started_at = time.perf_counter()
         result = self._lib.kahn_execute(
             self._handle,
             simulated_users,
@@ -201,37 +232,64 @@ class KahnService:
 
         try:
             sorted_ids = [sorted_ids_ptr[i].decode('utf-8') for i in range(count.value)]
-            return sorted_ids, bool(has_cycle.value), AlgorithmMetricsResponse(
-                id="",  # Will be set by caller
-                execution_time_ms=0,  # Would need separate call to get
-                vertex_count=0,
-                edge_count=0,
-                heap_usage_mb=0.0,
-                simulated_user_count=simulated_users,
-                complexity="O(V+E)",
-                recorded_at=None,  # Will be set by caller
-            )
+            elapsed_ms = round((time.perf_counter() - started_at) * 1000)
+            return sorted_ids, bool(has_cycle.value), self._metrics(elapsed_ms, simulated_users)
         finally:
             self._lib.kahn_free_results(sorted_ids_ptr, count.value)
 
     def _execute_python_fallback(self, simulated_users: int) -> tuple[list[str], bool, AlgorithmMetricsResponse]:
         """Python fallback implementation of Kahn's algorithm."""
         import heapq
-        import time
 
-        # This is a simplified fallback - in reality you'd need access to the graph data
-        # For now, return empty results with metrics
-        logger.info("Using Python fallback for Kahn's algorithm")
+        adjacency: dict[str, list[str]] = {str(node.id): [] for node in self._nodes}
+        indegree = {str(node.id): 0 for node in self._nodes}
+        nodes_by_id = {str(node.id): node for node in self._nodes}
+        index_by_id = {str(node.id): index for index, node in enumerate(self._nodes)}
 
-        return [], False, AlgorithmMetricsResponse(
-            id="",
-            execution_time_ms=0,
-            vertex_count=0,
-            edge_count=0,
-            heap_usage_mb=0.0,
+        for edge in self._edges:
+            source = str(edge.from_node_id)
+            target = str(edge.to_node_id)
+            adjacency[source].append(target)
+            indegree[target] += 1
+
+        started_at = time.perf_counter()
+        available: list[tuple[int, int, str]] = []
+        for index, node in enumerate(self._nodes):
+            node_id = str(node.id)
+            if indegree[node_id] == 0:
+                heapq.heappush(available, (0, index, node_id))
+
+        ordered_ids: list[str] = []
+        while available:
+            _, _, selected_id = heapq.heappop(available)
+            ordered_ids.append(selected_id)
+
+            for next_id in adjacency[selected_id]:
+                indegree[next_id] -= 1
+                if indegree[next_id] == 0:
+                    next_node = nodes_by_id[next_id]
+                    position_priority = int(next_node.position_y * 1000 + next_node.position_x)
+                    heapq.heappush(
+                        available,
+                        (position_priority, index_by_id[next_id], next_id),
+                    )
+
+        elapsed_ms = round((time.perf_counter() - started_at) * 1000)
+        has_cycle = len(ordered_ids) != len(self._nodes)
+        logger.info("Executed Kahn's algorithm with Python fallback")
+        return ordered_ids, has_cycle, self._metrics(elapsed_ms, simulated_users)
+
+    def _metrics(self, elapsed_ms: int, simulated_users: int) -> AlgorithmMetricsResponse:
+        estimated_bytes = len(self._nodes) * 64 + len(self._edges) * 24
+        return AlgorithmMetricsResponse(
+            id=str(uuid.uuid4()),
+            execution_time_ms=elapsed_ms,
+            vertex_count=len(self._nodes),
+            edge_count=len(self._edges),
+            heap_usage_mb=estimated_bytes / (1024 * 1024),
             simulated_user_count=simulated_users,
-            complexity="O(V+E)",
-            recorded_at=None,
+            complexity="O((V+E) log V)",
+            recorded_at=datetime.now(timezone.utc),
         )
 
     def __enter__(self) -> "KahnService":

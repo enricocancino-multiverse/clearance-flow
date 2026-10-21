@@ -8,7 +8,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field
 
-from app.models.account import UserRole
+from app.models.account import Department, ThemePreference, UserRole
 
 
 class LoginRequest(BaseModel):
@@ -44,6 +44,7 @@ class AccountResponse(BaseModel):
     account_id: UUID = Field(validation_alias="id", serialization_alias="account_id")
     email: str
     role: UserRole
+    department: Optional[Department] = None
     theme_preference: str
     avatar_url: Optional[str] = None
     bio: Optional[str] = None
@@ -68,9 +69,9 @@ class AccountCreate(BaseModel):
 
 class AccountUpdate(BaseModel):
     """Account update schema."""
-    theme_preference: Optional[str] = None
+    theme_preference: Optional[ThemePreference] = None
     avatar_url: Optional[str] = None
-    bio: Optional[str] = None
+    bio: Optional[str] = Field(None, max_length=500)
 
 
 class PasswordChangeRequest(BaseModel):

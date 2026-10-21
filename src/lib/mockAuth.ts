@@ -1,106 +1,61 @@
 /**
  * Mock Authentication Layer
- * Simulates backend auth using seeded demo data.
- * Replace with real API calls when FastAPI backend is ready.
+ * Provides development fallback authentication using the shared demo accounts.
  */
 
 import type { AuthSession, LoginPayload, UserRole, Student, Faculty, Account, DeptKey } from "@/types";
+import { DEMO_ACCOUNTS as DEMO_ACCOUNT_DEFINITIONS, DEMO_PASSWORD } from "@/lib/demoAccounts";
+export { classifyCredential } from "@/lib/demoAccounts";
 
-// ─── Seeded Demo Data (matches db/seed.sql) ──────────────────────────────────
+// ─── Seeded demo accounts (matches backend/init-db/02-seed-data.sql) ──────────
 
-const DEMO_ACCOUNTS: Record<string, Account & { password: string }> = {
-  "student@clearanceflow.edu": {
-    account_id: "11111111-1111-1111-1111-111111111111",
-    email: "student@clearanceflow.edu",
-    role: "student",
-    theme_preference: "dark",
-    avatar_url: null,
-    bio: "Coffee-fueled coder and aspiring software engineer. Loves UI/UX design and building things that matter.",
-    password: "password123",
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  "2026-stu-001": {
-    account_id: "11111111-1111-1111-1111-111111111111",
-    email: "student@clearanceflow.edu",
-    role: "student",
-    theme_preference: "dark",
-    avatar_url: null,
-    bio: "Coffee-fueled coder and aspiring software engineer. Loves UI/UX design and building things that matter.",
-    password: "password123",
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  "faculty@clearanceflow.edu": {
-    account_id: "22222222-2222-2222-2222-222222222222",
-    email: "faculty@clearanceflow.edu",
-    role: "faculty",
-    theme_preference: "dark",
-    avatar_url: null,
-    bio: "Ph.D. in Computer Science. Research areas: algorithm design and educational technology. Adviser, JPCS Chapter.",
-    password: "password123",
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  "admin@clearanceflow.edu": {
-    account_id: "33333333-3333-3333-3333-333333333333",
-    email: "admin@clearanceflow.edu",
-    role: "superadmin",
-    theme_preference: "dark",
-    avatar_url: null,
-    bio: "University-wide system administrator for ClearanceFlow.",
-    password: "password123",
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  "superadmin": {
-    account_id: "33333333-3333-3333-3333-333333333333",
-    email: "admin@clearanceflow.edu",
-    role: "superadmin",
-    theme_preference: "dark",
-    avatar_url: null,
-    bio: "University-wide system administrator for ClearanceFlow.",
-    password: "password123",
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-};
+const now = new Date().toISOString();
+const DEMO_ACCOUNTS: Record<string, Account & { password: string }> = {};
+const DEMO_STUDENTS: Record<string, Student> = {};
+const DEMO_FACULTY: Record<string, Faculty> = {};
 
-const DEMO_STUDENTS: Record<string, Student> = {
-  "11111111-1111-1111-1111-111111111111": {
-    school_id: "2026-STU-001",
-    account_id: "11111111-1111-1111-1111-111111111111",
-    department: "cs",
-    year_level: 3,
-    section: "BSCS-3A",
-    exam_date: "2026-08-28T10:00:00.000Z",
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-};
+for (const definition of DEMO_ACCOUNT_DEFINITIONS) {
+  const account: Account & { password: string } = {
+    account_id: definition.accountId,
+    email: definition.email,
+    role: definition.role,
+    department: definition.department,
+    theme_preference: "dark",
+    avatar_url: null,
+    bio: definition.bio,
+    password: DEMO_PASSWORD,
+    created_at: now,
+    updated_at: now,
+  };
+  DEMO_ACCOUNTS[definition.email.toLowerCase()] = account;
+  DEMO_ACCOUNTS[definition.schoolId.toLowerCase()] = account;
 
-const DEMO_FACULTY: Record<string, Faculty> = {
-  "22222222-2222-2222-2222-222222222222": {
-    school_id: "FAC-2026-088",
-    account_id: "22222222-2222-2222-2222-222222222222",
-    department: "cs",
-    is_superadmin: false,
-    position: "Department Chair, Computer Science",
-    availability: "accepting",
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  "33333333-3333-3333-3333-333333333333": {
-    school_id: "ADM-2026-001",
-    account_id: "33333333-3333-3333-3333-333333333333",
-    department: "cs",
-    is_superadmin: true,
-    position: "System Administrator",
-    availability: "accepting",
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-};
+  if (definition.role === "student") {
+    DEMO_STUDENTS[definition.accountId] = {
+      school_id: definition.schoolId,
+      account_id: definition.accountId,
+      department: definition.department,
+      year_level: definition.yearLevel ?? 1,
+      section: definition.section ?? "DEMO-1A",
+      exam_date: definition.department === "cs" ? "2026-08-28T10:00:00.000Z" : null,
+      created_at: now,
+      updated_at: now,
+    };
+  } else {
+    DEMO_FACULTY[definition.accountId] = {
+      school_id: definition.schoolId,
+      account_id: definition.accountId,
+      department: definition.department,
+      is_superadmin: definition.role === "superadmin",
+      position: definition.role === "superadmin"
+        ? "System Administrator"
+        : `Department Faculty, ${definition.department}`,
+      availability: "accepting",
+      created_at: now,
+      updated_at: now,
+    };
+  }
+}
 
 // ─── JWT Simulation (simple base64, not secure — dev only) ────────────────────
 
@@ -236,29 +191,129 @@ export async function mockResetPassword(token: string, newPassword: string): Pro
   return { message: "Password reset successfully." };
 }
 
-// ─── Credential Classification (mirrors backend) ──────────────────────────────
-
-export function classifyCredential(credential: string): { view: "student" | "faculty" | "superadmin"; dept: DeptKey } {
-  const val = credential.trim().toLowerCase();
-
-  if (/^\d{4}-\d{3,6}$/.test(val) || /^\d{4}-stu-\d{3}$/i.test(val)) {
-    const last = parseInt(val.slice(-2), 10);
-    const depts: DeptKey[] = ["cs", "hm", "crim", "basiced", "tesda"];
-    return { view: "student", dept: depts[last % depts.length] };
-  }
-
-  if (val.includes("admin") || val === "superadmin") {
-    return { view: "superadmin", dept: "cs" };
-  }
-
-  const deptMap: Record<string, DeptKey> = {
-    cs: "cs",
-    hm: "hm",
-    crim: "crim",
-    bsed: "basiced",
-    tvoc: "tesda",
+export async function mockUpdateAccount(
+  accountId: string,
+  updates: Partial<Pick<Account, "theme_preference" | "avatar_url" | "bio">>,
+): Promise<Account> {
+  const account = Object.values(DEMO_ACCOUNTS).find(item => item.account_id === accountId);
+  if (!account) throw new Error("Account not found.");
+  Object.assign(account, updates, { updated_at: new Date().toISOString() });
+  return {
+    account_id: account.account_id,
+    email: account.email,
+    role: account.role,
+    theme_preference: account.theme_preference,
+    avatar_url: account.avatar_url,
+    bio: account.bio,
+    created_at: account.created_at,
+    updated_at: account.updated_at,
   };
-  const prefix = val.split("@")[0].split(".").pop() ?? "";
-  const dept = deptMap[prefix] ?? "cs";
-  return { view: "faculty", dept };
+}
+
+export async function mockChangePassword(
+  accountId: string,
+  currentPassword: string,
+  newPassword: string,
+): Promise<{ message: string }> {
+  const account = Object.values(DEMO_ACCOUNTS).find(item => item.account_id === accountId);
+  if (!account || account.password !== currentPassword) {
+    throw new Error("Current password is incorrect.");
+  }
+  account.password = newPassword;
+  return { message: "Password changed successfully." };
+}
+
+export async function mockListAccounts(): Promise<Account[]> {
+  const uniqueAccounts = new Map<string, Account>();
+  for (const account of Object.values(DEMO_ACCOUNTS)) {
+    if (!uniqueAccounts.has(account.account_id)) {
+      uniqueAccounts.set(account.account_id, {
+        account_id: account.account_id,
+        email: account.email,
+        role: account.role,
+        department: DEMO_STUDENTS[account.account_id]?.department ?? DEMO_FACULTY[account.account_id]?.department ?? null,
+        theme_preference: account.theme_preference,
+        avatar_url: account.avatar_url,
+        bio: account.bio,
+        created_at: account.created_at,
+        updated_at: account.updated_at,
+      });
+    }
+  }
+  return [...uniqueAccounts.values()];
+}
+
+export async function mockCreateAccount(payload: {
+  email: string;
+  password: string;
+  role: "student" | "faculty";
+  school_id: string;
+  department: DeptKey;
+  year_level?: number;
+  section?: string;
+}): Promise<{ account_id: string; email: string; role: string; school_id: string; temporary_password: string; must_change_password: boolean }> {
+  const email = payload.email.trim().toLowerCase();
+  if (Object.values(DEMO_ACCOUNTS).some(account => account.email.toLowerCase() === email)) {
+    throw new Error("Account already exists.");
+  }
+
+  const now = new Date().toISOString();
+  const accountId = crypto.randomUUID();
+  DEMO_ACCOUNTS[email] = {
+    account_id: accountId,
+    email,
+    role: payload.role,
+    theme_preference: "dark",
+    avatar_url: null,
+    bio: null,
+    password: payload.password,
+    created_at: now,
+    updated_at: now,
+  };
+  DEMO_ACCOUNTS[payload.school_id.toLowerCase()] = DEMO_ACCOUNTS[email];
+
+  if (payload.role === "student") {
+    DEMO_STUDENTS[accountId] = {
+      school_id: payload.school_id.toUpperCase(),
+      account_id: accountId,
+      department: payload.department,
+      year_level: payload.year_level ?? 1,
+      section: payload.section ?? "BSCS-1A",
+      exam_date: null,
+      created_at: now,
+      updated_at: now,
+    };
+  } else {
+    DEMO_FACULTY[accountId] = {
+      school_id: payload.school_id.toUpperCase(),
+      account_id: accountId,
+      department: payload.department,
+      is_superadmin: false,
+      position: "Faculty Member",
+      availability: "accepting",
+      created_at: now,
+      updated_at: now,
+    };
+  }
+
+  return {
+    account_id: accountId,
+    email,
+    role: payload.role,
+    school_id: payload.school_id.toUpperCase(),
+    temporary_password: payload.password,
+    must_change_password: true,
+  };
+}
+
+export async function mockDeleteAccount(accountId: string): Promise<void> {
+  const target = Object.values(DEMO_ACCOUNTS).find(account => account.account_id === accountId);
+  if (!target) throw new Error("Account not found.");
+  if (target.role === "superadmin") throw new Error("Administrator accounts cannot be deleted from this demo.");
+
+  for (const [credential, account] of Object.entries(DEMO_ACCOUNTS)) {
+    if (account.account_id === accountId) delete DEMO_ACCOUNTS[credential];
+  }
+  delete DEMO_STUDENTS[accountId];
+  delete DEMO_FACULTY[accountId];
 }

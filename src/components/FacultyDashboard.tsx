@@ -1,8 +1,15 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { DeptKey, DEPT_CONFIG } from "../types";
 import { useTheme } from "../context/ThemeContext";
-import { INITIAL_QUEUE, useLiveDashboardState } from "../lib/liveDashboardState";
+import AccountSettings from "./AccountSettings";
+import FacultyGroupChat, { FacultyGroupChatButton } from "./FacultyGroupChat";
+import {
+  useLiveDashboardState,
+  INITIAL_GRAPH_NODES,
+  INITIAL_GRAPH_EDGES,
+  StudentClearanceStatus,
+} from "../lib/liveDashboardState";
 
 interface Props {
   deptName: string;
@@ -13,85 +20,19 @@ interface Props {
   onSignOut: () => void;
 }
 
-type Availability = "accepting" | "in-class" | "away";
-
 interface StudentRequest {
   id: string;
-  name: string;
   studentId: string;
+  name: string;
   year: string;
-  priorityScore: number;
   examDate: string;
+  submittedAt: string;
+  status: "pending" | "approved" | "held";
+  priorityScore: number;
   prereqsDone: number;
   prereqsTotal: number;
-  status: "pending" | "approved" | "held";
   holdReason?: string;
-  submittedAt: string;
 }
-
-const STUDENTS: StudentRequest[] = [
-  {
-    id: "sr1",
-    name: "Maria Santos",
-    studentId: "2024-10042",
-    year: "3rd Year",
-    priorityScore: 94,
-    examDate: "Aug 28, 2025",
-    prereqsDone: 3,
-    prereqsTotal: 4,
-    status: "pending",
-    submittedAt: "2h ago",
-  },
-  {
-    id: "sr2",
-    name: "Carlos Reyes",
-    studentId: "2023-08810",
-    year: "4th Year",
-    priorityScore: 89,
-    examDate: "Aug 27, 2025",
-    prereqsDone: 5,
-    prereqsTotal: 6,
-    status: "pending",
-    submittedAt: "3h ago",
-  },
-  {
-    id: "sr3",
-    name: "Anika Bautista",
-    studentId: "2024-10101",
-    year: "3rd Year",
-    priorityScore: 78,
-    examDate: "Sep 1, 2025",
-    prereqsDone: 2,
-    prereqsTotal: 4,
-    status: "approved",
-    submittedAt: "Yesterday",
-  },
-  {
-    id: "sr4",
-    name: "Jose Miguel Flores",
-    studentId: "2023-07714",
-    year: "4th Year",
-    priorityScore: 71,
-    examDate: "Sep 3, 2025",
-    prereqsDone: 4,
-    prereqsTotal: 6,
-    status: "held",
-    holdReason: "Pending library clearance",
-    submittedAt: "Yesterday",
-  },
-  {
-    id: "sr5",
-    name: "Patricia Lim",
-    studentId: "2024-10350",
-    year: "2nd Year",
-    priorityScore: 60,
-    examDate: "Sep 5, 2025",
-    prereqsDone: 1,
-    prereqsTotal: 4,
-    status: "pending",
-    submittedAt: "5h ago",
-  },
-];
 
 export default function FacultyDashboard({
   deptName,
@@ -102,22 +43,16 @@ export default function FacultyDashboard({
   onSignOut,
 }: Props) {
   const { isDark } = useTheme();
-  const { state, setAvailability, setQueue, completeNode, setRequestDecision } = useLiveDashboardState();
+  const {
+    state,
+    setQueue,
+    setStudentClearanceStatus,
+  } = useLiveDashboardState();
   const cfg = DEPT_CONFIG[deptKey];
-  const [availability, setAvailabilityLocal] = useState<Availability>(state.facultyAvailability as Availability);
-  const [students, setStudents] = useState<StudentRequest[]>(() =>
-    STUDENTS.map(student => ({
-      ...student,
-      status: state.requestDecisions[student.id] ?? student.status,
-    }))
+  const [studentSearch, setStudentSearch] = useState("");
+  const [schedule, setSchedule] = useState(() =>
+    state.queue.map(({ id, office, date, time, slot, total }) => ({ id, office, day: date, time, slot, total }))
   );
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [holdReason, setHoldReason] = useState("");
-  const [holdTarget, setHoldTarget] = useState<string | null>(null);
-  const [schedule, setSchedule] = useState([
-    { id: 1, office: "SAS", day: "Tue, Aug 26", time: "1:00 – 3:00 PM", slot: 7, total: 20 },
-    { id: 2, office: cfg.label, day: "Wed, Aug 27", time: "9:00 – 11:00 AM", slot: 3, total: 12 },
-  ]);
   const [scheduleDraft, setScheduleDraft] = useState({
     office: cfg.label,
     day: "Wed, Aug 27",
@@ -125,40 +60,55 @@ export default function FacultyDashboard({
     slot: 3,
     total: 12,
   });
+  useEffect(() => {
+    setSchedule(state.queue.map(({ id, office, date, time, slot, total }) => ({ id, office, day: date, time, slot, total })));
+  }, [state.queue]);
+
+  const removeScheduleEntry = (id: number) => {
+    setQueue(state.queue.filter(entry => entry.id !== id));
+  };
 
   const bg = isDark ? "bg-slate-950" : "bg-gray-50";
   const navBg = isDark ? "bg-slate-900/80 border-slate-800" : "bg-white/90 border-gray-200";
   const card = isDark ? "bg-slate-900 border-slate-800" : "bg-white border-gray-200";
   const text = isDark ? "text-slate-100" : "text-slate-900";
   const muted = isDark ? "text-slate-500" : "text-slate-500";
+  const graphNodes = state.graphNodes.length ? state.graphNodes : INITIAL_GRAPH_NODES;
+  const graphEdges = state.graphEdges.length ? state.graphEdges : INITIAL_GRAPH_EDGES;
+  const departmentStudents = Object.values(state.students)
+    .filter(student => student.department === deptKey)
+    .filter(student => `${student.name} ${student.studentNumber}`.toLowerCase().includes(studentSearch.toLowerCase().trim()))
+    .sort((left, right) => left.name.localeCompare(right.name));
 
-  const approve = (id: string) => {
-    setStudents(s => s.map(x => (x.id === id ? { ...x, status: "approved" } : x)));
-    setRequestDecision(id, "approved");
-    const nextNode = state.graphNodes.find(node => node.status === "active");
-    if (nextNode) completeNode(nextNode.id);
-    setExpandedId(null);
+  const getClearanceStatus = (studentId: string, nodeId: string): StudentClearanceStatus => {
+    const stored = state.studentClearanceRecords[studentId]?.[nodeId];
+    if (stored) return stored;
+    const request = state.clearanceRequests
+      .filter(item => item.studentAccountId === studentId && item.nodeId === nodeId)
+      .sort((left, right) => right.submittedAt.localeCompare(left.submittedAt))[0];
+    if (request?.status === "approved") return "cleared";
+    if (request?.status === "held") return "office";
+    return graphNodes.find(node => node.id === nodeId)?.status === "completed" ? "cleared" : "pending";
   };
 
-  const hold = (id: string) => {
-    if (!holdReason.trim()) return;
-    setStudents(s =>
-      s.map(x => (x.id === id ? { ...x, status: "held", holdReason } : x))
-    );
-    setRequestDecision(id, "held");
-    setHoldTarget(null);
-    setHoldReason("");
-    setExpandedId(null);
-  };
+  const isNodeUnlocked = (studentId: string, nodeId: string) =>
+    graphEdges
+      .filter(edge => edge.to === nodeId)
+      .every(edge => getClearanceStatus(studentId, edge.from) === "cleared");
 
-  const pending = students.filter(s => s.status === "pending").length;
-  const approved = students.filter(s => s.status === "approved").length;
-  const held = students.filter(s => s.status === "held").length;
-
-  const handleAvailabilityChange = (next: Availability) => {
-    setAvailabilityLocal(next);
-    setAvailability(next);
-    setQueue(state.queue.length ? state.queue : INITIAL_QUEUE);
+  const hasClearanceToReset = (studentId: string, nodeId: string) => {
+    const descendants = new Set([nodeId]);
+    let expanded = true;
+    while (expanded) {
+      expanded = false;
+      for (const edge of graphEdges) {
+        if (descendants.has(edge.from) && !descendants.has(edge.to)) {
+          descendants.add(edge.to);
+          expanded = true;
+        }
+      }
+    }
+    return [...descendants].some(id => getClearanceStatus(studentId, id) !== "pending");
   };
 
   const addScheduleEntry = () => {
@@ -171,7 +121,6 @@ export default function FacultyDashboard({
       slot: Math.max(1, scheduleDraft.slot),
       total: Math.max(1, scheduleDraft.total),
     };
-    setSchedule(prev => [nextEntry, ...prev]);
     setScheduleDraft({
       office: cfg.label,
       day: "Wed, Aug 27",
@@ -181,7 +130,7 @@ export default function FacultyDashboard({
     });
     setQueue([
       {
-        id: Date.now() + 1,
+        id: nextEntry.id,
         office: nextEntry.office,
         date: nextEntry.day,
         time: nextEntry.time,
@@ -191,16 +140,6 @@ export default function FacultyDashboard({
       ...state.queue,
     ]);
   };
-
-  const availConfig: Record<
-    Availability,
-    { label: string; color: string; bg: string; icon: string }
-  > = {
-    accepting: { label: "Accepting Clearances", color: "#10B981", bg: "#052e16", icon: "✓" },
-    "in-class": { label: "In Class", color: "#F59E0B", bg: "#2d1f00", icon: "📖" },
-    away: { label: "Away", color: "#EF4444", bg: "#1f0808", icon: "—" },
-  };
-  const avail = availConfig[availability];
 
   return (
     <div
@@ -234,30 +173,6 @@ export default function FacultyDashboard({
 
           <div className="flex-1" />
 
-          {/* Availability toggle */}
-          <div
-            className={`flex items-center gap-2 rounded-xl p-1 ${
-              isDark ? "bg-slate-800" : "bg-gray-100"
-            }`}
-          >
-            {(["accepting", "in-class", "away"] as Availability[]).map(a => {
-              const ac = availConfig[a];
-              return (
-                <button
-                  key={a}
-                  onClick={() => handleAvailabilityChange(a)}
-                  className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200"
-                  style={
-                    availability === a
-                      ? { background: ac.bg, color: ac.color, border: `1px solid ${ac.color}44` }
-                      : { color: "#64748b" }
-                  }
-                >
-                  {ac.icon} {ac.label}
-                </button>
-              );
-            })}
-          </div>
           <button
             type="button"
             onClick={onFreespace}
@@ -274,6 +189,8 @@ export default function FacultyDashboard({
               <circle cx="7" cy="7" r="3" />
             </svg>
           </button>
+          <FacultyGroupChatButton className={muted} />
+          <AccountSettings onCustomizeAccount={onViewProfile} />
           <button
             type="button"
             onClick={onSignOut}
@@ -287,6 +204,97 @@ export default function FacultyDashboard({
       </header>
 
       <div className="max-w-6xl mx-auto px-6 py-6">
+        <FacultyGroupChat />
+        <section className={`rounded-2xl border p-5 mb-6 ${card}`}>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between mb-5">
+            <div>
+              <h2 className={`text-sm font-bold ${text}`}>Student Clearances</h2>
+              <p className={`text-xs mt-1 ${muted}`} style={{ fontFamily: "Inter, sans-serif" }}>
+                Review each requirement, mark in-person follow-up, or clear it online. Prerequisites control what can be cleared next.
+              </p>
+            </div>
+            <label className="w-full sm:w-72">
+              <span className={`block text-[10px] font-semibold uppercase tracking-wider mb-1 ${muted}`}>Find a student</span>
+              <input
+                value={studentSearch}
+                onChange={event => setStudentSearch(event.target.value)}
+                placeholder="Name or student number"
+                className={`w-full rounded-lg border px-3 py-2 text-xs ${isDark ? "bg-slate-800 border-slate-700 text-slate-100" : "bg-white border-gray-300 text-gray-900"}`}
+              />
+            </label>
+          </div>
+
+          {departmentStudents.length === 0 ? (
+            <div className={`rounded-xl border border-dashed p-6 text-center text-xs ${isDark ? "border-slate-700" : "border-gray-300"} ${muted}`}>
+              {studentSearch
+                ? "No students match that search."
+                : "Students from this department will appear here when their clearance dashboard is opened on this device."}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {departmentStudents.map(student => (
+                <article key={student.accountId} className={`rounded-xl border p-4 ${isDark ? "border-slate-800 bg-slate-950/40" : "border-gray-200 bg-gray-50/70"}`}>
+                  <div className="flex items-center justify-between gap-3 mb-3">
+                    <div className="min-w-0">
+                      <h3 className={`text-sm font-semibold truncate ${text}`}>{student.name}</h3>
+                      <p className={`text-xs mt-0.5 ${muted}`}>{student.studentNumber}</p>
+                    </div>
+                    <span className="rounded-full px-2.5 py-1 text-[10px] font-bold" style={{ color: cfg.color, background: `${cfg.color}18` }}>
+                      {cfg.abbr}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2">
+                    {graphNodes.map(node => {
+                      const status = getClearanceStatus(student.accountId, node.id);
+                      const unlocked = isNodeUnlocked(student.accountId, node.id);
+                      const isCleared = status === "cleared" && unlocked;
+                      const label = !unlocked ? "Locked — prerequisite needed" : isCleared ? "Cleared online" : status === "office" ? "Office required" : "Pending";
+
+                      return (
+                        <div key={node.id} className={`grid grid-cols-1 gap-2 rounded-lg px-3 py-2.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center ${isDark ? "bg-slate-900" : "bg-white"}`}>
+                          <div className="min-w-0">
+                            <div className={`text-xs font-semibold ${text}`}>{node.label}</div>
+                            <div className={`text-[10px] mt-0.5 ${muted}`}>
+                              {node.office ?? deptName} · {label}
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setStudentClearanceStatus(student.accountId, node.id, "office")}
+                              disabled={!unlocked || status === "office"}
+                              className="rounded-md border border-amber-500/30 px-2 py-1 text-[10px] font-semibold text-amber-500 disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              Require Office
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setStudentClearanceStatus(student.accountId, node.id, "cleared")}
+                              disabled={!unlocked || isCleared}
+                              className="rounded-md border border-emerald-500/30 px-2 py-1 text-[10px] font-semibold text-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              Clear Online
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setStudentClearanceStatus(student.accountId, node.id, "pending")}
+                              disabled={!hasClearanceToReset(student.accountId, node.id)}
+                              className={`rounded-md border px-2 py-1 text-[10px] font-semibold disabled:cursor-not-allowed disabled:opacity-40 ${isDark ? "border-slate-700 text-slate-400" : "border-gray-300 text-gray-600"}`}
+                            >
+                              Reset
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+
         <div className={`rounded-2xl border p-5 mb-6 ${card}`}>
           <div className="flex items-center justify-between gap-4 mb-4">
             <div>
@@ -351,7 +359,17 @@ export default function FacultyDashboard({
               <div key={slot.id} className={`rounded-xl border p-3 ${isDark ? "border-slate-700 bg-slate-800/50" : "border-gray-200 bg-gray-50"}`}>
                 <div className="flex items-center justify-between gap-2">
                   <div className={`text-xs font-bold ${text}`}>{slot.office}</div>
-                  <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500">{slot.day}</div>
+                  <div className="flex items-center gap-2">
+                    <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500">{slot.day}</div>
+                    <button
+                      type="button"
+                      onClick={() => removeScheduleEntry(slot.id)}
+                      className="rounded-md px-2 py-1 text-[10px] font-semibold text-rose-400 transition hover:bg-rose-500/10 hover:text-rose-300"
+                      aria-label={`Delete ${slot.office} schedule on ${slot.day}`}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
                 <div className={`mt-2 text-xs ${muted}`} style={{ fontFamily: "Inter, sans-serif" }}>{slot.time}</div>
                 <div className={`mt-2 text-[11px] font-mono ${text}`} style={{ fontFamily: "JetBrains Mono, monospace" }}>
@@ -362,107 +380,6 @@ export default function FacultyDashboard({
           </div>
         </div>
 
-        <div className={`rounded-2xl border p-5 mb-6 ${card}`}>
-          <h2 className={`text-sm font-bold ${text}`}>Clearance Workflow</h2>
-          <p className={`mt-1 text-xs ${muted}`}>Confirm successful compliance to unlock the next prerequisite step for students.</p>
-          <button
-            onClick={() => {
-              const nextNode = state.graphNodes.find(node => node.status === "active");
-              if (nextNode) completeNode(nextNode.id);
-            }}
-            className="mt-3 w-full py-2 rounded-lg text-xs font-bold transition-all hover:opacity-90"
-            style={{ background: cfg.color, color: '#fff' }}
-          >
-            Mark Next Graph Step Complete
-          </button>
-        </div>
-
-        {/* Stats row */}
-        <div className="grid grid-cols-4 gap-4 mb-6">
-          {[
-            { label: "Total Requests", value: students.length, color: "#94a3b8" },
-            { label: "Pending Review", value: pending, color: cfg.color },
-            { label: "Approved", value: approved, color: "#10B981" },
-            { label: "On Hold", value: held, color: "#F59E0B" },
-          ].map(stat => (
-            <div key={stat.label} className={`rounded-xl border p-4 ${card}`}>
-              <div
-                className="text-2xl font-bold"
-                style={{
-                  color: stat.color,
-                  fontFamily: "JetBrains Mono, monospace",
-                }}
-              >
-                {stat.value}
-              </div>
-              <div className={`text-xs mt-1 ${muted}`} style={{ fontFamily: "Inter, sans-serif" }}>
-                {stat.label}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Priority queue table */}
-        <div className={`rounded-2xl border overflow-hidden ${card}`}>
-          <div className={`px-6 py-4 border-b flex items-center justify-between ${
-            isDark ? "border-slate-800" : "border-gray-200"
-          }`}>
-            <div>
-              <h2 className={`text-sm font-bold ${text}`}>Priority Queue — Clearance Requests</h2>
-              <p className={`text-xs mt-0.5 ${muted}`} style={{ fontFamily: "Inter, sans-serif" }}>
-                Sorted by priority score (exam urgency × prerequisites completed)
-              </p>
-            </div>
-            <div
-              className="px-3 py-1 rounded-full text-xs font-mono"
-              style={{
-                background: `${cfg.color}18`,
-                color: cfg.color,
-                fontFamily: "JetBrains Mono, monospace",
-              }}
-            >
-              {pending} pending
-            </div>
-          </div>
-
-          {/* Availability warning */}
-          {availability !== "accepting" && (
-            <div
-              className="px-6 py-3 text-xs font-medium flex items-center gap-2"
-              style={{
-                background: availConfig[availability].bg,
-                color: availConfig[availability].color,
-              }}
-            >
-              {availConfig[availability].icon} Status: {availConfig[availability].label} — new clearances are
-              paused
-            </div>
-          )}
-
-          <div className={`divide-y ${isDark ? "divide-slate-800" : "divide-gray-200"}`}>
-            {students
-              .sort((a, b) => b.priorityScore - a.priorityScore)
-              .map(s => (
-                <StudentRow
-                  key={s.id}
-                  student={s}
-                  accentColor={cfg.color}
-                  expanded={expandedId === s.id}
-                  onToggle={() => setExpandedId(expandedId === s.id ? null : s.id)}
-                  onApprove={() => approve(s.id)}
-                  onHoldInit={() => {
-                    setHoldTarget(s.id);
-                    setExpandedId(s.id);
-                  }}
-                  holdTarget={holdTarget}
-                  holdReason={holdReason}
-                  onHoldReasonChange={setHoldReason}
-                  onHoldConfirm={() => hold(s.id)}
-                  isDark={isDark}
-                />
-              ))}
-          </div>
-        </div>
       </div>
     </div>
   );

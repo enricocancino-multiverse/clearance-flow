@@ -1,8 +1,9 @@
 "use client";
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { DeptKey, DEPT_CONFIG } from '../types';
 import { useTheme } from '../context/ThemeContext';
-import { useLiveDashboardState, INITIAL_GRAPH_NODES, INITIAL_GRAPH_EDGES, INITIAL_QUEUE } from '../lib/liveDashboardState';
+import AccountSettings from './AccountSettings';
+import { useLiveDashboardState, INITIAL_GRAPH_NODES, INITIAL_GRAPH_EDGES } from '../lib/liveDashboardState';
 
 interface Props {
   currentUserId: string;
@@ -28,29 +29,6 @@ interface ClearNode {
   y: number;
 }
 
-const NODES: ClearNode[] = [
-  { id: 'library', label: 'Library', office: 'University Library', status: 'completed', prerequisites: [], x: 160, y: 70 },
-  { id: 'medical', label: 'Medical', office: 'Health Services Unit', status: 'completed', prerequisites: [], x: 490, y: 70 },
-  { id: 'finance', label: 'Finance', office: 'Accounting Office', status: 'active', prerequisites: ['library'], x: 80, y: 210 },
-  { id: 'sas', label: 'SAS', office: 'Student Affairs Office', status: 'active', prerequisites: ['library'], x: 310, y: 210 },
-  { id: 'depthead', label: 'Dept Head', office: 'Department Office', status: 'locked', prerequisites: ['finance', 'sas'], x: 195, y: 360 },
-  { id: 'registrar', label: 'Registrar', office: 'Registrar\'s Office', status: 'locked', prerequisites: ['depthead', 'medical'], x: 370, y: 480 },
-];
-
-const EDGES: [string, string][] = [
-  ['library', 'finance'],
-  ['library', 'sas'],
-  ['finance', 'depthead'],
-  ['sas', 'depthead'],
-  ['medical', 'registrar'],
-  ['depthead', 'registrar'],
-];
-
-const QUEUE = [
-  { id: 1, office: 'Accounting Office', date: 'Tue, Aug 26', time: '9:00 – 11:00 AM', slot: 3, total: 12 },
-  { id: 2, office: 'Student Affairs Office', date: 'Tue, Aug 26', time: '1:00 – 3:00 PM', slot: 7, total: 20 },
-];
-
 export default function StudentDashboard({
   currentUserId,
   userName,
@@ -63,18 +41,48 @@ export default function StudentDashboard({
   onSignOut,
 }: Props) {
   const { isDark, toggle } = useTheme();
-  const { state } = useLiveDashboardState();
+  const { state, submitClearanceRequest, registerStudent } = useLiveDashboardState();
   const cfg = DEPT_CONFIG[dept];
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [officeHoursOpen, setOfficeHoursOpen] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const dragRef = useRef<{ x: number; y: number; originX: number; originY: number } | null>(null);
-  const graphNodes = (state.graphNodes.length ? state.graphNodes : INITIAL_GRAPH_NODES) as ClearNode[];
+  const baseGraphNodes = (state.graphNodes.length ? state.graphNodes : INITIAL_GRAPH_NODES) as ClearNode[];
   const graphEdges = state.graphEdges.length ? state.graphEdges : INITIAL_GRAPH_EDGES;
-  const queue = state.queue.length ? state.queue : INITIAL_QUEUE;
+  const studentRecords = state.studentClearanceRecords[currentUserId] ?? {};
+  const studentRequests = state.clearanceRequests.filter(item => item.studentAccountId === currentUserId);
+  const requestStatusByNode = Object.fromEntries(
+    studentRequests
+      .sort((left, right) => left.submittedAt.localeCompare(right.submittedAt))
+      .map(request => [
+        request.nodeId,
+        request.status === 'approved' ? 'cleared' : request.status === 'held' ? 'office' : 'pending',
+      ])
+  );
+  const clearanceStatus = (node: ClearNode) =>
+    studentRecords[node.id] ?? requestStatusByNode[node.id] ?? (node.status === 'completed' ? 'cleared' : 'pending');
+  const graphNodes = baseGraphNodes.map(node => {
+    const prerequisitesMet = node.prerequisites.every(id => clearanceStatus(baseGraphNodes.find(candidate => candidate.id === id) ?? node) === 'cleared');
+    const status = clearanceStatus(node);
+    return {
+      ...node,
+      status: status === 'cleared' && prerequisitesMet ? 'completed' as const : prerequisitesMet ? 'active' as const : 'locked' as const,
+    };
+  });
+  const queue = state.queue;
   const completed = graphNodes.filter(n => n.status === 'completed').length;
-  const progress = Math.round((completed / graphNodes.length) * 100);
+  const progress = graphNodes.length ? Math.round((completed / graphNodes.length) * 100) : 0;
+  const permitReady = graphNodes.length > 0 && graphNodes.every(node => clearanceStatus(node) === 'cleared');
+
+  useEffect(() => {
+    registerStudent({
+      accountId: currentUserId,
+      name: userName,
+      studentNumber,
+      department: dept,
+    });
+  }, [currentUserId, dept, registerStudent, studentNumber, userName]);
 
   const clampZoom = (value: number) => Math.min(1.8, Math.max(0.8, value));
 
@@ -153,7 +161,7 @@ export default function StudentDashboard({
 
           {/* Progress */}
           <div className="hidden sm:flex flex-col items-end gap-1 shrink-0">
-            <div className={`text-xs font-medium ${muted}`}>{completed}/{NODES.length} Steps</div>
+            <div className={`text-xs font-medium ${muted}`}>{completed}/{graphNodes.length} Steps</div>
             <div className={`w-36 h-1.5 rounded-full ${isDark ? 'bg-slate-800' : 'bg-gray-200'}`}>
               <div
                 className="h-full rounded-full transition-all duration-500"
@@ -198,6 +206,8 @@ export default function StudentDashboard({
             {isDark ? '☀️' : '🌙'}
           </button>
 
+          <AccountSettings />
+
           <button
             type="button"
             onClick={onSignOut}
@@ -211,6 +221,15 @@ export default function StudentDashboard({
           </button>
         </div>
       </header>
+
+      {permitReady && (
+        <div className="max-w-7xl mx-auto px-6 pt-5">
+          <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-5 py-4 text-emerald-500">
+            <div className="font-bold">All clearance requirements are complete</div>
+            <p className="mt-1 text-xs opacity-80">Your clearance permit is ready. Please follow your school’s instructions to claim it.</p>
+          </div>
+        </div>
+      )}
 
       <div className="max-w-7xl mx-auto px-6 py-6 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-6 items-start">
         {/* Main: DAG visualizer */}
@@ -298,7 +317,11 @@ export default function StudentDashboard({
           <div className={`rounded-2xl border p-5 ${card}`}>
             <h3 className={`text-sm font-semibold ${text} mb-3`}>Clearance Status</h3>
             <div className="space-y-2">
-              {graphNodes.map(n => (
+              {graphNodes.map(n => {
+                const request = state.clearanceRequests
+                  .filter(item => item.studentAccountId === currentUserId && item.nodeId === n.id)
+                  .sort((left, right) => right.submittedAt.localeCompare(left.submittedAt))[0];
+                return (
                 <div key={n.id} className="flex items-center gap-3">
                   <StatusDot status={n.status} color={cfg.color} />
                   <div className="flex-1 min-w-0">
@@ -317,10 +340,39 @@ export default function StudentDashboard({
                     }`}
                     style={n.status === 'active' ? { background: `${cfg.color}22`, color: cfg.color } : {}}
                   >
-                    {n.status === 'completed' ? '✓ Done' : n.status === 'active' ? 'Active' : 'Locked'}
+                    {n.status === 'locked'
+                      ? 'Locked'
+                      : clearanceStatus(n) === 'cleared'
+                        ? '✓ Done'
+                        : clearanceStatus(n) === 'office'
+                          ? 'Office required'
+                          : request?.status === 'pending'
+                            ? 'Requested'
+                            : 'Active'}
                   </span>
+                  {n.status === 'active' && clearanceStatus(n) !== 'office' && clearanceStatus(n) !== 'cleared' && (
+                    <button
+                      type="button"
+                      onClick={() => submitClearanceRequest({
+                        studentAccountId: currentUserId,
+                        studentName: userName,
+                        nodeId: n.id,
+                      })}
+                      disabled={request?.status === 'pending' || request?.status === 'approved'}
+                      className="rounded-md border border-blue-500/30 px-2 py-1 text-[10px] font-semibold text-blue-400 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {request?.status === 'pending'
+                        ? 'Requested'
+                        : request?.status === 'approved'
+                          ? 'Approved'
+                          : request?.status === 'held'
+                            ? 'Office required'
+                            : 'Request sign-off'}
+                    </button>
+                  )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -345,17 +397,19 @@ export default function StudentDashboard({
       </div>
 
       {officeHoursOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4" role="dialog" aria-modal="true" aria-labelledby="office-hours-title">
-          <div className={`w-full max-w-lg rounded-2xl border p-5 shadow-2xl ${card}`}>
-            <div className="mb-4 flex items-start justify-between gap-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/70 p-4 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="office-hours-title">
+          <div className={`my-auto flex max-h-[calc(100vh-2rem)] w-full max-w-lg flex-col rounded-2xl border p-5 shadow-2xl ${card}`}>
+            <div className="mb-4 flex shrink-0 items-start justify-between gap-4">
               <div>
                 <h2 id="office-hours-title" className={`text-lg font-bold ${text}`}>Office Hours</h2>
                 <p className={`mt-1 text-xs ${muted}`}>Assigned sign-off windows available to you.</p>
               </div>
               <button type="button" onClick={() => setOfficeHoursOpen(false)} className={`text-xl ${muted}`} aria-label="Close office hours">×</button>
             </div>
-            <div className="space-y-3">
-              {queue.map(q => (
+            <div className="custom-scroll min-h-0 flex-1 space-y-3 overflow-y-auto pr-1" aria-label="Available office hours">
+              {queue.length === 0 ? (
+                <p className={`py-6 text-center text-sm ${muted}`}>No office hours are currently available.</p>
+              ) : queue.map(q => (
                 <div key={q.id} className="rounded-xl border p-3" style={{ background: `${cfg.color}0d`, borderColor: `${cfg.color}30` }}>
                   <div className={`mb-1 text-xs font-bold ${text}`}>{q.office}</div>
                   <div className={`mb-2 text-xs ${muted}`} style={{ fontFamily: 'Inter, sans-serif' }}>{q.date} · {q.time}</div>

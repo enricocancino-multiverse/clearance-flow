@@ -4,16 +4,15 @@ Faculty routes.
 
 import heapq
 from datetime import datetime
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_session
 from app.models.account import Faculty, Student, UserRole, AvailabilityStatus
-from app.models.clearance import ClearanceRequest, ClearanceNode, ClearanceEdge, ScheduleSlot
+from app.models.clearance import ClearanceRequest, ClearanceEdge, ScheduleSlot
 from app.routes.auth import get_current_account
 from app.schemas.faculty import FacultyQueueItemResponse, FacultyResponse
 from app.schemas.clearance import (
@@ -60,9 +59,6 @@ async def get_faculty_queue(
         )
 
     # Get all clearance nodes and edges for prerequisite calculation
-    nodes_result = await session.execute(select(ClearanceNode))
-    nodes = {str(n.id): n for n in nodes_result.scalars().all()}
-
     edges_result = await session.execute(select(ClearanceEdge))
     edges = edges_result.scalars().all()
 
@@ -85,8 +81,20 @@ async def get_faculty_queue(
     )
     requests = requests_result.scalars().all()
 
-    # Calculate priority for each request
-    queue_items = []
+    approved_by_student: dict[str, set[str]] = {}
+    student_ids = {request.student_account_id for request in requests}
+    if student_ids:
+        approved_result = await session.execute(
+            select(ClearanceRequest.student_account_id, ClearanceRequest.node_id).where(
+                ClearanceRequest.student_account_id.in_(student_ids),
+                ClearanceRequest.status == "approved",
+            )
+        )
+        for student_id, node_id in approved_result.all():
+            approved_by_student.setdefault(str(student_id), set()).add(str(node_id))
+
+    # Use a max-priority greedy queue, with submission time and request ID as stable tie-breakers.
+    priority_queue: list[tuple[float, float, str, FacultyQueueItemResponse]] = []
     for request in requests:
         student = request.student
         if not student:
@@ -98,40 +106,42 @@ async def get_faculty_queue(
         prereqs_total = len(prereq_ids)
 
         # Count completed prerequisites
-        student_requests_result = await session.execute(
-            select(ClearanceRequest)
-            .where(
-                ClearanceRequest.student_account_id == student.account_id,
-                ClearanceRequest.status == "approved",
-            )
-        )
-        approved_node_ids = {str(r.node_id) for r in student_requests_result.scalars().all()}
+        approved_node_ids = approved_by_student.get(str(student.account_id), set())
         prereqs_done = sum(1 for pid in prereq_ids if pid in approved_node_ids)
 
-        # Priority scoring:
-        # - Earlier exam date = higher priority
-        # - More prereqs done = higher priority
-        # - Earlier submission = higher priority (FIFO for same priority)
         priority_score = 0.0
         if student.exam_date:
-            days_until_exam = (student.exam_date - datetime.now()).days
-            priority_score += max(0, 100 - days_until_exam)  # Higher if exam is soon
+            exam_now = datetime.now(student.exam_date.tzinfo) if student.exam_date.tzinfo else datetime.now()
+            days_until_exam = (student.exam_date.date() - exam_now.date()).days
+            if days_until_exam <= 0:
+                priority_score += 100
+            elif days_until_exam <= 7:
+                priority_score += 90
+            elif days_until_exam <= 14:
+                priority_score += 70
+            elif days_until_exam <= 30:
+                priority_score += 50
+            else:
+                priority_score += 20
 
-        priority_score += (prereqs_done / max(1, prereqs_total)) * 50
-        priority_score += (1 / (request.submitted_at.timestamp() / 1e6 + 1)) * 10
+        priority_score += (prereqs_done / prereqs_total) * 50 if prereqs_total else 50
+        submitted_now = datetime.now(request.submitted_at.tzinfo) if request.submitted_at.tzinfo else datetime.now()
+        hours_waiting = max(0.0, (submitted_now - request.submitted_at).total_seconds() / 3600)
+        priority_score += min(10.0, hours_waiting)
+        if student.department == faculty.department:
+            priority_score += 5
 
-        queue_items.append(FacultyQueueItemResponse(
+        item = FacultyQueueItemResponse(
             request=ClearanceRequestResponse.model_validate(request),
             student=StudentResponse.model_validate(student),
-            priority_score=priority_score,
+            priority_score=round(priority_score, 2),
             prereqs_done=prereqs_done,
             prereqs_total=prereqs_total,
-        ))
+        )
+        submitted_at = request.submitted_at.timestamp()
+        heapq.heappush(priority_queue, (-item.priority_score, submitted_at, str(request.id), item))
 
-    # Sort by priority score (highest first)
-    queue_items.sort(key=lambda x: x.priority_score, reverse=True)
-
-    return queue_items
+    return [heapq.heappop(priority_queue)[3] for _ in range(len(priority_queue))]
 
 
 @router.patch("/{faculty_id}/availability", response_model=FacultyResponse)

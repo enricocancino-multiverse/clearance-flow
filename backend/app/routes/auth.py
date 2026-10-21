@@ -22,10 +22,12 @@ from app.core.security import (
     get_password_hash,
     verify_password,
 )
-from app.models.account import Account, Student, UserRole
+from app.models.account import Account, Student, ThemePreference, UserRole
 from app.schemas.auth import (
     AccountCreate,
     AccountResponse,
+    AccountUpdate,
+    PasswordChangeRequest,
     ForgotPasswordRequest,
     ForgotPasswordResponse,
     LoginRequest,
@@ -51,17 +53,19 @@ def classify_credential(credential: str) -> tuple[UserRole, str]:
     """
     val = credential.strip().lower()
 
-    # Student ID patterns: YYYY-NNNNN or YYYY-STU-NNN
-    if val.startswith(tuple(str(y) for y in range(2020, 2030))):
-        if "-stu-" in val or val.count("-") >= 1:
+    if "@" in val:
+        role = UserRole.SUPERADMIN if val == "admin@clearanceflow.edu" else UserRole.FACULTY
+        return role, "email"
+
+    if val.startswith(tuple(str(year) for year in range(2020, 2030))):
+        if "-stu-" in val or (len(val) > 5 and val[5:].isdigit()):
             return UserRole.STUDENT, "school_id"
 
-    # Superadmin detection
-    if "admin" in val or val == "superadmin":
-        return UserRole.SUPERADMIN, "email"
+    if val.startswith(("fac-", "adm-")):
+        role = UserRole.SUPERADMIN if val.startswith("adm-") else UserRole.FACULTY
+        return role, "school_id"
 
-    # Faculty email pattern
-    return UserRole.FACULTY, "email"
+    return UserRole.FACULTY, "school_id"
 
 
 async def get_current_account(
@@ -110,6 +114,42 @@ async def get_current_account_optional(
         return await get_current_account(request, session)
     except HTTPException:
         return None
+
+
+@router.patch("/me", response_model=AccountResponse)
+async def update_current_account(
+    payload: AccountUpdate,
+    session: AsyncSession = Depends(get_session),
+    account: Account = Depends(get_current_account),
+) -> AccountResponse:
+    """Update profile preferences for the authenticated account."""
+    updates = payload.model_dump(exclude_unset=True)
+    if "theme_preference" in updates and updates["theme_preference"] is not None:
+        updates["theme_preference"] = ThemePreference(updates["theme_preference"])
+    for field, value in updates.items():
+        setattr(account, field, value)
+
+    await session.commit()
+    await session.refresh(account)
+    return AccountResponse.model_validate(account)
+
+
+@router.post("/change-password")
+async def change_password(
+    payload: PasswordChangeRequest,
+    session: AsyncSession = Depends(get_session),
+    account: Account = Depends(get_current_account),
+) -> dict[str, str]:
+    """Change the authenticated account's password after verifying its current password."""
+    if not verify_password(payload.current_password, account.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect",
+        )
+    account.hashed_password = get_password_hash(payload.new_password)
+    account.must_change_password = False
+    await session.commit()
+    return {"message": "Password changed successfully."}
 
 
 @router.post("/login", response_model=LoginResponse)
